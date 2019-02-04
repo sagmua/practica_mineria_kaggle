@@ -1,0 +1,41 @@
+---
+title: "Decision Trees"
+author: "Juan Ramón Gómez Berzosa"
+date: "4/2/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+#Librerías a usar:
+library(dplyr)
+library(Hmisc)
+library(mice)
+library(Amelia)
+library(PerformanceAnalytics)
+library(caret)
+```
+
+## Preprocesamiento 
+```{r, include=FALSE}
+#lectura de datos:
+train = read.csv("train.csv", na.string=c(" ", "NA", "?"))
+test = read.csv("test.csv", na.string=c(" ", "NA", "?"))
+#Pasamos a formato TIBBLE:
+train = as_tibble(train)
+test = as_tibble(test)
+```
+Técnicas preprocesamiento Ripper (...)
+
+
+## Ripper
+
+Generación de modelos RIPPER (...)
+
+```{r}
+
+```
+ated the plot.
