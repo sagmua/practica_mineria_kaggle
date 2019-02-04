@@ -10,13 +10,26 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r, include=FALSE}
-#Librerías a usar:
+#Librerías a usar y funciones útiles:
 library(dplyr)
 library(Hmisc)
 library(mice)
 library(Amelia)
 library(PerformanceAnalytics)
 library(caret)
+
+# funcion para generar el archivo con el envio a kaggle. Argumentos:
+# @param path ruta donde se quiere almacenar
+# @param file nombre del archivo donde almacenar los datos
+# @param cdataset conjunto de datos a almacenar
+escrituraDatos <- function(y, file = "envio", path = "./"){
+  # se compone el path completo
+  pathCompleto <- paste(path,file,sep="")
+  
+  # se escribe el archivo
+  cat(paste("Id","Prediccion\n", sep = ","), file=pathCompleto)
+  write.csv(as.data.frame(cbind(1:length(y), y)), pathCompleto, row.names = FALSE)
+}
 ```
 
 ## Preprocesamiento 
