@@ -17,6 +17,7 @@ library(mice)
 library(Amelia)
 library(PerformanceAnalytics)
 library(caret)
+library(corrplot)
 
 ##FUNCIONES AUXILIARES:
 
@@ -44,6 +45,18 @@ train = as_tibble(train)
 test = as_tibble(test)
 ```
 Técnicas preprocesamiento Ripper (...)
+
+Valores perdidos:
+```{r}
+anyNA(train)
+summary(train)
+```
+
+Matriz de correlación:
+
+```{r}
+#corrplot(cor(train))
+```
 
 
 ## Ripper
