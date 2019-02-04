@@ -10,7 +10,7 @@ a los algoritmos Support Vector Machine (*SVM*), Reglas de asociación (*RIPPER*
 
 ## Participantes:
 
-* Samuel Cardenete Rodríguez [sagmua](https://github.com/sagmua) 
-* Juan Ramón Gómez Berzosa [jramongomez](https://github.com/jramongomez)
-* Carmen Biedma Rodríguez [carmenbiedma](https://github.com/carmenbiedma)
+* [Samuel Cardenete Rodríguez](https://github.com/sagmua) 
+* [Juan Ramón Gómez Berzosa](https://github.com/jramongomez)
+* [Carmen Biedma Rodríguez](https://github.com/carmenbiedma)
 * Antonio Javier Benítez Guijarro
