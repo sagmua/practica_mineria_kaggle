@@ -14,28 +14,26 @@ knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(Hmisc)
 library(mice)
-library(Amelia)
-library(PerformanceAnalytics)
 library(caret)
 ```
 
 ## Preprocesamiento 
 ```{r, include=FALSE}
 #lectura de datos:
+setwd("~/GitHub/practica_mineria_kaggle")
 train = read.csv("train.csv", na.string=c(" ", "NA", "?"))
 test = read.csv("test.csv", na.string=c(" ", "NA", "?"))
 #Pasamos a formato TIBBLE:
 train = as_tibble(train)
 test = as_tibble(test)
 ```
-Técnicas preprocesamiento Ripper (...)
+Técnicas preprocesamiento de árboles de decisión (...)
 
 
-## Ripper
+## Árboles de decisión
 
-Generación de modelos RIPPER (...)
+Generación de modelos de árboles de decisión  (...)
 
 ```{r}
 
 ```
-ated the plot.
