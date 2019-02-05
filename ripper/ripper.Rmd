@@ -21,18 +21,7 @@ library(corrplot)
 
 ##FUNCIONES AUXILIARES:
 
-# funcion para generar el archivo con el envio a kaggle. Argumentos:
-# @param path ruta donde se quiere almacenar
-# @param file nombre del archivo donde almacenar los datos
-# @param cdataset conjunto de datos a almacenar
-generarEnvio = function(y, file = "envio.csv", path = "./"){
-  # se compone el path completo
-  pathCompleto <- paste(path,file,sep="")
-  
-  # se escribe el archivo
-  cat(paste("Id","Prediccion\n", sep = ","), file=pathCompleto)
-  write.table(as.data.frame(cbind(1:length(y), y)), pathCompleto, sep = ",", row.names = FALSE, col.names = FALSE, append = TRUE)
-}
+source("../funcionesAux.R")
 ```
 
 ## Preprocesamiento 
