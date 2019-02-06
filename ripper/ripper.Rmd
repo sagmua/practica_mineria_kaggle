@@ -2,7 +2,9 @@
 title: "ripper"
 author: "Samuel Cardenete"
 date: "4/2/2019"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -53,7 +55,7 @@ nrow(datos[which(numero_na==1),])
 ```
 Como vemos se trata de un número considerable de valores perdidos. En resumen tenemos que el 15\% de nuestro conjunto de datos de entrenamiento posee valores perdidos, pero como todos sabemos, una imagen vale más que mil palabras, asi que realicemos un análisis gráfico de los valores perdidos:
 
-```{r}
+```{r, echo=FALSE}
 plot <- VIM::aggr(datos,col=c('blue','red'),numbers=TRUE,sortVars=TRUE,labels=names(data),
                   cex.axis=.5,gap=1,ylab=c("Gráfico de datos perdidos","Patron"))
 ```
@@ -62,13 +64,54 @@ Como vemos en el gráfico de la izquierda, en la distribución de valores perdid
 Además, si observamos la segunda gráfica, podemos ver la independencia entre la aparición de valores perdidos entre variables, de forma que la aparición de un valor perdido en una variable, no implica la aparición de valores perdidos en otros.
 
 
-Esto requiere sin duda un análisis más exahustivo de los valores perdidos así como posible imputación. Para ello emplearemos el algoritmo de imputación *MICE*. Comencemos obteniendo el patrón de aparición de los datos perdidos:
+Esto requiere sin duda un análisis más exahustivo de los valores perdidos así como posible imputación. Para ello emplearemos el algoritmo de imputación *MICE*. Comenzamos obteniendo el patrón de aparición de los datos perdidos, pero nuevamente obtenemos, al haber solo valores perdidos en una única variable obtenemos que no hay dependencia/patrones de aparición de los valores perdidos.
+
+```{r, include=FALSE}
+patron = mice::md.pattern(x = datos)
+```
+Determinemos las instancias conpletas e incompletas y visualicemoslo:
+```{r, echo = FALSE}
+completas = mice::ncc(datos)
+incompletas = mice::nic(datos)
+
+df <- data.frame(
+  group = c("Inompletas", "Completas"),
+  value = c(incompletas, completas)
+  )
+bar <- ggplot(df, aes( x = "", y = value, fill = group)) + geom_bar(width = 1, stat = "identity") 
+pie <- bar + coord_polar("y", start=0) + geom_text(aes(x=1, y = cumsum(value) - value*0.5, label=round((value/nrow(datos)*100),digits = 2)))
+pie
+
+
+```
+
+En una primera aproximación, he decidido realizar la imputación de valores perdidos mediante Predictive Mean Matching (*PMM*). La concordancia media predictiva es un enfoque de imputación semiparamétrica. Es similar al método de regresión, excepto que para cada valor perdido, se reemplaza con un valor aleatorio de entre los valores de un donante observado de una observación cuyos valores pronosticados de regresión son los más cercanos al valor predicho de regresión para el valor perdido de la simulación del modelo de regresión.
+
+De esta forma utilizamos una aproximación del valor perdido mucho más precisa que simplemente la media o mediana.
+```{r, results="hide", echo=TRUE, warning=FALSE}
+imputados = mice::mice(datos, m=5, meth="pmm")
+```
+
+Aquellas variables donde se han realizado imputaciones mediante *PMM*:
+```{r}
+imputados$method[imputados$method == "pmm"]
+```
+Si observamos, MICE no ha realizado la imputación sobre todas las variables de nuestro conjunto de datos eso implica que aún tenemos valores perdidos en los imputados. Pero si observamos el log vemos que ha ignorado las variables colineares, por tanto, podremos quedarnos con el conjunto de variables restantes ya imputadas, de forma que además de realizar la imputación, hemos hecho una selección de variables eliminando las redundantes (altamente colineares):
+
+```{r}
+var_rest = names(imputados$method[imputados$method == "pmm"])
+datos = complete( imputados)
+datos = datos[,append(var_rest, "C")]
+summary(datos)
+```
+
+
 
 
 Matriz de correlación:
 
 ```{r}
-#corrplot(cor(train))
+corrplot(cor(datos))
 ```
 
 
