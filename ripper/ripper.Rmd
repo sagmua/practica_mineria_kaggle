@@ -18,6 +18,7 @@ library(Amelia)
 library(PerformanceAnalytics)
 library(caret)
 library(corrplot)
+library(VIM)
 
 ##FUNCIONES AUXILIARES:
 
@@ -27,19 +28,42 @@ source("../funcionesAux.R")
 ## Preprocesamiento 
 ```{r, include=FALSE}
 #lectura de datos:
-train = read.csv("train.csv", na.string=c(" ", "NA", "?"))
-test = read.csv("test.csv", na.string=c(" ", "NA", "?"))
-#Pasamos a formato TIBBLE:
-train = as_tibble(train)
-test = as_tibble(test)
+datos = read.csv("../train.csv", na.string=c(" ", "NA", "?"))
+test = read.csv("../test.csv", na.string=c(" ", "NA", "?"))
 ```
 Técnicas preprocesamiento Ripper (...)
 
 Valores perdidos:
-```{r}
-anyNA(train)
-summary(train)
+```{r, include=FALSE}
+anyNA(datos)
+
+#numero de valores perdidos por cada instancia:
+numero_na = apply(datos,1, function(x) length(which(is.na(x))))
+
 ```
+Número de instancias con más de un valor perdido:
+```{r}
+nrow(datos[which(numero_na>1),])
+```
+
+Como vemos en nuestro conjunto de datos, no tenemos ninguna instancia con más de un valor perdido, pero si que tenemos muchas instancias con un valor perdido, en total:
+```{r}
+nrow(datos[which(numero_na==1),])
+
+```
+Como vemos se trata de un número considerable de valores perdidos. En resumen tenemos que el 15\% de nuestro conjunto de datos de entrenamiento posee valores perdidos, pero como todos sabemos, una imagen vale más que mil palabras, asi que realicemos un análisis gráfico de los valores perdidos:
+
+```{r}
+plot <- VIM::aggr(datos,col=c('blue','red'),numbers=TRUE,sortVars=TRUE,labels=names(data),
+                  cex.axis=.5,gap=1,ylab=c("Gráfico de datos perdidos","Patron"))
+```
+Como vemos en el gráfico de la izquierda, en la distribución de valores perdidos en las variables, vemos que se encuentran entre el 0.5\% y el 0.02\% en exactamente la mitad de características de nuestro conjunto de datos de entrenamiento. La distribución de los valores perdidos parece ser aleatoria si vemos las densidades de estos.
+
+Además, si observamos la segunda gráfica, podemos ver la independencia entre la aparición de valores perdidos entre variables, de forma que la aparición de un valor perdido en una variable, no implica la aparición de valores perdidos en otros.
+
+
+Esto requiere sin duda un análisis más exahustivo de los valores perdidos así como posible imputación. Para ello emplearemos el algoritmo de imputación *MICE*. Comencemos obteniendo el patrón de aparición de los datos perdidos:
+
 
 Matriz de correlación:
 
