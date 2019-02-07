@@ -13,33 +13,7 @@ library(mice)
 library(VIM)
 library(class)
 
-##FUNCIONES AUXILIARES:
-
-# funcion para generar el archivo con el envio a kaggle. Argumentos:
-# @param path ruta donde se quiere almacenar
-# @param file nombre del archivo donde almacenar los datos
-# @param cdataset conjunto de datos a almacenar
-generarEnvio = function(y, file = "envio.csv", path = "./"){
-  # se compone el path completo
-  pathCompleto <- paste(path,file,sep="")
-  
-  # se escribe el archivo
-  cat(paste("Id","Prediccion\n", sep = ","), file=pathCompleto)
-  write.table(as.data.frame(cbind(1:length(y), y)), pathCompleto, sep = ",", row.names = FALSE, col.names = FALSE, append = TRUE)
-}
-
-generarEnvio2 = function(y,file="envio.csv",path="./"){
-  # se compone el path completo
-  pathCompleto <- paste(path,file,sep="")
-  
-  ids <- 1:length(y)
-  prediccion <- as.vector(y)
-  res <- as.data.frame(cbind(ids,prediccion))
-
-  write.csv(res,file = pathCompleto,row.names=FALSE,quote=FALSE)
-
-  
-}
+source("../funcionesAux.R")
 ```
 
 ```{r}
@@ -47,7 +21,7 @@ datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
 test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
 ```
 
-#Visión preliminar de los datos
+#Visi?n preliminar de los datos
 
 ```{r}
 nrow(datos)
@@ -58,17 +32,17 @@ ncol(datos)
 summary(datos)
 ```
 
-Como podemos ver, es un problema que tiene 50 variables descriptivas y una de clasificación. Una de las cosas más importantes que nos proporciona este resumen de los datos es que todas las varables tienen valores perdidos, por lo que será un problema a solucionar. Por otro lado, podemos ver que los dominios de las variables son muy diferentes unos de otros por lo que también convendrá aplicar un centrado y escalado. Ésto último es muy importante ya que vamos a aplicar un método basado en distancias.
+Como podemos ver, es un problema que tiene 50 variables descriptivas y una de clasificaci?n. Una de las cosas m?s importantes que nos proporciona este resumen de los datos es que todas las varables tienen valores perdidos, por lo que ser? un problema a solucionar. Por otro lado, podemos ver que los dominios de las variables son muy diferentes unos de otros por lo que tambi?n convendr? aplicar un centrado y escalado. ?sto ?ltimo es muy importante ya que vamos a aplicar un m?todo basado en distancias.
 
-Otra de las cosas que sería interesante observar es si tenemos un problema desbalanceado, para ello crearemos una tabla en la que veremos las instancias que hay de una clase y de otra.
+Otra de las cosas que ser?a interesante observar es si tenemos un problema desbalanceado, para ello crearemos una tabla en la que veremos las instancias que hay de una clase y de otra.
 
 ```{r}
 table(datos$C)
 ```
 
-Como podemos ver, es un problema desbalanceado, por lo que será un aspecto a tratar en el preprocesamiento de los datos.
+Como podemos ver, es un problema desbalanceado, por lo que ser? un aspecto a tratar en el preprocesamiento de los datos.
 
-#Imputación de valores perdidos.
+#Imputaci?n de valores perdidos.
 
 En primer lugar, vamos a eliminar las instancias qeu tienen un porcentaje de valores peridos superior aun umbral previamente establecido.
 
@@ -83,25 +57,25 @@ which(eliminar == TRUE)
 
 Como vemos, no hay ninguna instancia que podamos eliminar siguiendo este criterio, por lo que tendremos que realizar otra tarea para eliminar los valores perdidos.
 
-A continuación se imputarán los valores perdidos. Esto quiere decir que a cada uno de ellos se le asignará unn valor. Dicho valor puede ser el mismo para todos, la media o cualquier otra medida basada en los demás datos de la variable o un valor proporcionado por cualquier método de imputación.
+A continuaci?n se imputar?n los valores perdidos. Esto quiere decir que a cada uno de ellos se le asignar? unn valor. Dicho valor puede ser el mismo para todos, la media o cualquier otra medida basada en los dem?s datos de la variable o un valor proporcionado por cualquier m?todo de imputaci?n.
 
-Vamos a ver el patrón de datos perdidos que sigue nuestro conjunto de datos usando la libreria mice. Como podemos ver a continuación, tenemos un total de 7778 variables que no tienen ningun valor perdido.
+Vamos a ver el patr?n de datos perdidos que sigue nuestro conjunto de datos usando la libreria mice. Como podemos ver a continuaci?n, tenemos un total de 7778 variables que no tienen ningun valor perdido.
 
 ```{r}
 patron <- mice::md.pattern(datos)
 print(patron)
 ```
 
-Si observamos gráficamente el resultado proporcionado por el patrón, vemos que no hay ninguna variable que tenga màs de un valor perdido. Esto explica que en el paso anterior no se haya eliminado ninguna instancia, ya que, que una de las variables esté perdida no es razón suficiente como para poder eliminar la fila conmpleta.
+Si observamos gr?ficamente el resultado proporcionado por el patr?n, vemos que no hay ninguna variable que tenga m?s de un valor perdido. Esto explica que en el paso anterior no se haya eliminado ninguna instancia, ya que, que una de las variables est? perdida no es raz?n suficiente como para poder eliminar la fila conmpleta.
 
-Hay otra libreria que nos permite visualizar de distintas formas los valores perdidos de un conjunto de datos. Veamos a continuación las utilidades que nos proporciona.
+Hay otra libreria que nos permite visualizar de distintas formas los valores perdidos de un conjunto de datos. Veamos a continuaci?n las utilidades que nos proporciona.
 
 ```{r}
 plot <- VIM::aggr(datos,col=c('blue','red'),numbers=TRUE,sortVars=TRUE,labels=names(data),
-                  cex.axis=.5,gap=1,ylab=c("Gráfico de datos perdidos","Patron"))
+                  cex.axis=.5,gap=1,ylab=c("Gr?fico de datos perdidos","Patron"))
 ```
 
-A continuación se procede a realizar la imputación:________________________--
+A continuaci?n se procede a realizar la imputaci?n:________________________--
 
 ```{r}
 completos <- mice::ncc(datos)
@@ -117,10 +91,10 @@ cat("COMPLETOS = ", completos, " INCOMPLETOS = ",incompletos)
 
 ```
 
-Con el método que se ha usado, se realizan 5 imputaciones distintas, de las cuales eligiremos la que mejor se ajuste a nuestros datos. Para elegir cuál de ellas utilizaremos, nos quedaremos con la que se distribuya de forma más parecida a los datos originales. En el siguiente gráfico de densidad podemos ver para cada una de las variables imputadas la distribucion que siguen con respecto a la densidad.
+Con el m?todo que se ha usado, se realizan 5 imputaciones distintas, de las cuales eligiremos la que mejor se ajuste a nuestros datos. Para elegir cu?l de ellas utilizaremos, nos quedaremos con la que se distribuya de forma m?s parecida a los datos originales. En el siguiente gr?fico de densidad podemos ver para cada una de las variables imputadas la distribucion que siguen con respecto a la densidad.
 
 
-Como vemos, el método pmm de mice no imputa todosl os valores, aplicaremos amelia que no tiene problema para imputarlos todos.
+Como vemos, el m?todo pmm de mice no imputa todosl os valores, aplicaremos amelia que no tiene problema para imputarlos todos.
 
 ```{r}
 imputados.amelia <- Amelia::amelia(datos,m=1,parallel="multicore",noms="C")
@@ -137,6 +111,6 @@ test_pred
 
 ```{r}
 generarEnvio(y=test_pred,file="envioSamu.csv")
-generarEnvio2(y=test_pred,file="envioCarmen.csv")
+generarEnvio(y=test_pred,file="envioCarmen.csv")
 ```
 

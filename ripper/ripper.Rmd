@@ -21,6 +21,9 @@ library(PerformanceAnalytics)
 library(caret)
 library(corrplot)
 library(VIM)
+library(RWeka)
+library ( NoiseFiltersR )
+
 
 ##FUNCIONES AUXILIARES:
 
@@ -33,9 +36,8 @@ source("../funcionesAux.R")
 datos = read.csv("../train.csv", na.string=c(" ", "NA", "?"))
 test = read.csv("../test.csv", na.string=c(" ", "NA", "?"))
 ```
-Técnicas preprocesamiento Ripper (...)
 
-Valores perdidos:
+### Valores perdidos y estudio de correlación
 ```{r, include=FALSE}
 anyNA(datos)
 
@@ -81,8 +83,6 @@ df <- data.frame(
 bar <- ggplot(df, aes( x = "", y = value, fill = group)) + geom_bar(width = 1, stat = "identity") 
 pie <- bar + coord_polar("y", start=0) + geom_text(aes(x=1, y = cumsum(value) - value*0.5, label=round((value/nrow(datos)*100),digits = 2)))
 pie
-
-
 ```
 
 En una primera aproximación, he decidido realizar la imputación de valores perdidos mediante Predictive Mean Matching (*PMM*). La concordancia media predictiva es un enfoque de imputación semiparamétrica. Es similar al método de regresión, excepto que para cada valor perdido, se reemplaza con un valor aleatorio de entre los valores de un donante observado de una observación cuyos valores pronosticados de regresión son los más cercanos al valor predicho de regresión para el valor perdido de la simulación del modelo de regresión.
@@ -105,21 +105,54 @@ datos = datos[,append(var_rest, "C")]
 summary(datos)
 ```
 
+Hemos reducido nuestro conjunto de datos a 11 variables predictoras, eliminando aquellas altamente correladas.
 
+Ya llegados a este punto, que hemos realizado la imputación de las variables ocn MICE y hemos reducido dimendsionalidad, hagamos un estudio de la correlación de las variables que tenemos ahora mismo en nuestro conjunto de datos. 
+Para ello realizamos una representación gráfica de las correlaciones entre las variables, de forma que a mayor amplitud del círculo mayor correlación existe, los colores fríos indican correlación directa y los cálidos inversa:
 
-
-Matriz de correlación:
 
 ```{r}
 corrplot(cor(datos))
 ```
+Como vemos, tal como decíamos antes, no tenemos variables directamente altamente correladas, puesto que MICE hace ese filtrado durante el proceso de cálculo de las imputaciones. Pero por el otro lado, si vemos que tenemos muchas variables altamente inversamente correladas, es el caso por ejemplo de *X25* con *X44*, o con *X18*.
 
-
-## Ripper
-
-Generación de modelos RIPPER (...)
+Por tanto esto nos indica que existe redundancia, puesto que las variables altamente correladas se explican entre sí. Por lo que podemos reducir estas mismas eliminando *X25* y *X44*:
 
 ```{r}
+#datos = datos[,!names(datos) %in% c("X25", "X44")]
+datos$C = as.factor(datos$C)
+```
+
+Eliminación de ruido:
+```{r, echo=FALSE}
+set.seed (1)
+out = IPF(C~., data = datos , nfolds=5, s = 3)
+summary(out, explicit =TRUE)
+identical(out$cleanData , datos[ setdiff (1:nrow(datos) ,out$remIdx) ,])
 
 ```
+
+
+## Modelos RIPPER
+
+Llegados a este punto, donde el preprocesamiento está realizado, sólo nos queda obtener el mejor módelo basado en reglas de asociación mediante el algoritmo RIPPER que mejor se adapte a nuestro conjunto de datos:
+
+```{r}
+modelRipp <- JRip(C~.,data = out$cleanData)
+prediction = predict(modelRipp, datos[- out$remIdx,- which(names(datos) == "C")])
+```
+
+Calculamos la precisión para el conjunto train:
+```{r}
+precision(predictionLabels = prediction, testLabels = datos$C[-out$remIdx])
+```
+Generamos un primer envío, sin discretizar ni normalizar, ni outliers:
+```{r}
+prediction = predict(modelRipp, test)
+generarEnvio(prediction, file = "con_todos_sin_ruido.csv")
+```
+
+
+
+
 
