@@ -10,15 +10,25 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r, include=FALSE}
+
 #Librerías a usar:
 library(dplyr)
 library(Hmisc)
 library(mice)
+library(ggplot2)
 library(caret)
+
+#Funciones auxiliares:
+setwd("~/GitHub/practica_mineria_kaggle")
+source("funcionesAux.R")
 ```
+#Árboles de clasificación
+
+En este apartado realizaremos el preprocesamiento del conjunto de datos necesario para poder aprender el mejor clasificador basado en árboles, el cual obtenga la mayor precisión posible en la clasificación de nuestro conjunto de datos de prueba. 
 
 ## Preprocesamiento 
-```{r, include=FALSE}
+En primer lugar haremos la lectura de los datos.
+```{r}
 #lectura de datos:
 setwd("~/GitHub/practica_mineria_kaggle")
 train = read.csv("train.csv", na.string=c(" ", "NA", "?"))
@@ -26,9 +36,80 @@ test = read.csv("test.csv", na.string=c(" ", "NA", "?"))
 #Pasamos a formato TIBBLE:
 train = as_tibble(train)
 test = as_tibble(test)
+dim(train)
+dim(test)
 ```
-Técnicas preprocesamiento de árboles de decisión (...)
 
+Nuestro dataset consta 13063 instancias para aprender nuestro clasificador, 9144 para train y 3919 para test, teniendo un total de 50 caraterísticas para cada observación y una variable de clase. Como es lógico como estamos realizando una competición, de la parte del test no tenemos información de clase ya que se comprobará el porcentaje de acierto una vez subamos nuestra clasificación del test a kaggle. También cabe destacar que hay un conjunto de datos que se encuentran en privado en kaggle, los cuales se usarán para ver los ganadores de la competición y sólo se desbloqueará una vez se cierre el plazo.
+
+En primer lugar analizaremos el conjunto de datos de entrenamiento con el objetivo de observar las tendencias de los datos, así como la existencia y tratamiento de valores perdidos, outliers y ruido. 
+
+
+###Análisis inicial
+
+Comenzaremos echando un vistazo al summary para obtener una información inicial.
+
+```{r summary}
+#describe(train
+summary(train)
+#ggplot(data=train) + geom_bar(aes(x=C, y = ..prop.., group=1))
+```
+En primer lugar cabe destacar que todas las variables de nuestro conjunto de datos de entrenamiento son reales, a excepción de la variable de clase. Con un vistazo inicial podemos apreciar la presencia de valores perdidos en cada atributo, sin embargo observamos que la cantidad de missing values por cada característica es bastante similar, de modo que el número varía entre 17 y 35, a excepción de dos variables con 41 y 50. Esto nos puede llevar a dar una pista de que seguramente los missing values no estén por casualidad y hayan sido distribuidos de forma aleatoria en este rango por cada una de las variables, de forma intencionada. Por tanto, estaremos dentro del caso de "MCAR: missing values completely at random".
+
+Para comenzar, debido a que tenemos tal cantidad de observaciones vamos a observar si existen observaciones repetidas y procederemos a eliminarlas.
+
+```{r unique}
+train = unique(train)
+dim(train)
+#summary(train)
+```
+
+Como hemos observado teníamos algunas observaciones repetidas, así que las hemos eliminado y nos hemos quedado con un total de 26 observaciones. Como es normal, los valores en cuanto a missing values no habrán cambiado debido a que estas instancias con valores perdidos no se podían comparar con el resto.
+
+Ahora vamos a observar la proporción de la variable de clase con respecto a su presencia en las distintas observaciones para comprobar si existe desbalanceo en el problema.
+
+```{r proporcionClase}
+proporcion = group_by(train,C) %>% summarise(round((nc = (n() * 100)/dim(train)[1]),digits = 1))
+proporcion
+ggplot(data = train) + 
+  geom_bar(mapping = aes(x = C, y = ..prop.., group = 1))
+
+
+```
+
+Podemos observar como el 65.5% de las observaciones corresponden a la clase 0 y el 35.5% restante a la clase 1, por lo tanto tenemos un conjunto de datos no balanceado.
+
+### Missing Values
+
+Antes de empezar con el entrenamiento del clasificador, es importante tratar los valores perdidos del conjunto de datos. Cabe destacar que aunque vayamos a tratar con clasificadores basados en árboles, tenemos que lidiar con los missing values ya que al no permitirse en al competición utilizar multiclasificadores basados en árboles estos si son sensibles a la existencia de valores perdidos. Afectan de tres formas principalmente:
+
+  - Afecta en como se calculan las medidas de impureza.
+  - Afecta en como distribuir las instancias con missing values a los nodos hijos.
+  - Afecta en como una instancia del test con missing values es clasificada.
+
+En primer lugar vamos a estudiar el último caso, ya que este nos puede influir mucho a la hora de preprocesar los datos. Para ello comprobaremos si existen valores perdidos en el test.
+
+```{r }
+
+which(is.na(test))
+
+```
+Como podemos ver no tenemos atributos con valores perdidos, lo cual nos favorece ya que además de no darnos problemas con el algoritmo de clasificación no nos obliga a tener que realizar las mismas transformaciones en el test que en el train a la hora del preprocesamiento. Por tanto, el último caso no nos interesa mucho pero si que nos afectan en las dos restantes.
+
+Vamos a ver el número de instancias completas e incompletas y además observaremos si existe un patrón seguido por los valores perdidos, viendo su distribución por las instancias.
+
+```{r patron missing values}
+patron <- mice::md.pattern(x=train[,-51], plot=TRUE)
+
+completas <- mice::ncc(train)
+incompletas <- mice::nic(train)
+
+
+#completas
+#incompletas
+```
+
+Tenemos un total de 7752 instancias completas y 1366 instancias a las que les falta al menos una característica, aproximadamente el 15% de las observaciones. En todas las variables hay presencia de missing values como hemos comentado antes (menos en la variable de clase, como es lógico), pero lo que es llamativo es que siguen una distribución peculiar. En todas las observaciones que tienen valores perdidos, sólo hay presencia de missing values en una característica. Además, también es llamativo el número de observaciones con missing values para cada atributo, ya que como hemos comentado antes parece que se han distribuido los valores perdidos de forma intencionada de modo que se han elegido un número de instancias aleatorias entre 15 y 50 (el número de variables) en las que se han colocado un missing value en alguna de sus características.
 
 ## Árboles de decisión
 
