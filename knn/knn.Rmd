@@ -12,6 +12,11 @@ library(caret)
 library(mice)
 library(VIM)
 library(class)
+library(outliers)
+library(ggplot2)
+library(mvoutlier)
+library(FSelector)
+library(corrplot)
 
 source("../funcionesAux.R")
 ```
@@ -42,7 +47,19 @@ table(datos$C)
 
 Como podemos ver, es un problema desbalanceado, por lo que ser? un aspecto a tratar en el preprocesamiento de los datos.
 
-#Imputaci?n de valores perdidos.
+
+#ESCALADO Y CENTRADO DE LOS DATOS
+
+```{r}
+datosPrep <- caret::preProcess(datos[,-ncol(datos)],method = c("center","scale"))
+datos[,-ncol(datos)] <- predict(datosPrep,datos[,-ncol(datos)])
+datosPrep <- caret::preProcess(test,method = c("center","scale"))
+test <- predict(datosPrep,test)
+```
+
+
+
+#Imputación de valores perdidos.
 
 En primer lugar, vamos a eliminar las instancias qeu tienen un porcentaje de valores peridos superior aun umbral previamente establecido.
 
@@ -104,13 +121,74 @@ cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
 datos <- imputados.amelia$imputations$imp1
 ```
 
+#Detección de datos anómalos
+
+
 ```{r}
-test_pred <- knn(train = datos[,-ncol(datos)], test = test,cl = datos$C, k=3)
-test_pred
+anomalos <- outliers::outlier(datos[,-ncol(datos)])
+print(anomalos)
+```
+
+Al método siguiente solo se le puede pasar un argumento de menos de 10 dimensiones, por lo que si queremos ver todos los outliers que hay en todas las variables, tenemos que ponerals por separado. Además, solo considera los outliers de una dimensión, es decir, que no detecta outliers qeu estén provocados por una combiación anómala de valores de un conjhunto de variables.
+
+```{r}
+resOutliers <- mvoutlier::uni.plot(datos[1:10])
 ```
 
 ```{r}
-generarEnvio(y=test_pred,file="envioSamu.csv")
-generarEnvio(y=test_pred,file="envioCarmen.csv")
+print(resOutliers$outliers)
+```
+
+```{r}
+datos <- datos[!resOutliers$outliers, ]
+```
+
+
+#Selección de caracteristicas
+
+En primer lugar, vamos a estudiar la importancia de las variables que teemos en el problema. Para ello, en primera instancia, veremos como de correladas están entre sí. Eliminaremos aquiellas que están más correladas.
+
+
+```{r}
+y = cor(datos)
+corrplot(y,type="upper")
+```
+
+Para ver la importancia de las variables en relación a dicha medida vamos a usar el paquete FSelector. En primer lugar calculamos los pesos de todas las variables y después me quedaré con las 20 mejores.
+
+```{r}
+pesosCorrelacion <- FSelector::linear.correlation(C~., datos)
+print(pesosCorrelacion)
+```
+
+```{r}
+subset.correlation <- FSelector::cutoff.k(pesosCorrelacion,20)
+f <- as.simple.formula(subset.correlation,"medv")
+print(f)
+datos1.correlation <- datos[,subset.correlation]
+datos1.correlation$C <- datos$C
+test1.correlation <- test[,subset.correlation]
+```
+
+
+#Generación del modelo
+
+Comprobar modelo con datos de test
+
+```{r}
+test_pred <- knn(train = datos1.correlation[,-ncol(datos)], test = datos1.correlation[,-ncol(datos)],cl = datos1.correlation$C, k=3)
+accuracy <- length(which(test_pred == datos1.correlation$C))/nrow(datos1.correlation)
+accuracy
+```
+
+
+```{r}
+test_pred <- knn(train = datos1.correlation[,-ncol(datos1.correlation)], test = test1.correlation,cl = datos1.correlation$C, k=3)
+test_pred
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envio.csv")
 ```
 
