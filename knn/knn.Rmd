@@ -177,7 +177,7 @@ Comprobar modelo con datos de test
 
 ```{r}
 train_pred <- knn(train = datos1.correlation[,-ncol(datos)], test = datos1.correlation[,-ncol(datos)],cl = datos1.correlation$C, k=3)
-accuracy <- length(which(train_pred == datos1.correlation$C))/nrow(datos1.correlation)
+accuracy <- precision(train_pred,datos$C)
 accuracy
 ```
 
