@@ -144,7 +144,15 @@ datos <- datos[!resOutliers$outliers, ]
 ```
 
 
-#Selección de caracteristicas
+##Selección de caracteristicas
+
+La selección de características es una técnica para reducir la diimensionalidad muy utilizada. Cuando realizamos esta tares obtenemos modelos más rápidos (hay menos datos), con mayor exactitud ya que la generalización es mayor y obtenemos unos resultados más simples.
+
+Para realizar esta tarea hay diferentes criterios y diferentes algoritmos. Vamos a probar con algunos de ellos para ver qué selección funciona mejor para el algoritmo de estudio. En primer lugar se aplicarán medidas para eliminar variables y a continuación veremos si con algún algoritmo más completo podemos obtener mejores resultados.
+
+#Correlación lineal
+
+EL MODELO OBTENIDO NOS DA UN ACCURACY EN TRAIN DE 0.9995869 Y EN TEST DE 0.79989 POR LO QUE PODEMOS DECIR QUE EL MODELO SOBREAJUSTA. -> NOTA: Habría que ver si hay que eliminar menos variables o más.
 
 En primer lugar, vamos a estudiar la importancia de las variables que teemos en el problema. Para ello, en primera instancia, veremos como de correladas están entre sí. Eliminaremos aquiellas que están más correladas.
 
@@ -170,25 +178,190 @@ datos1.correlation$C <- datos$C
 test1.correlation <- test[,subset.correlation]
 ```
 
+#chi.squared
 
-#Generación del modelo
-
-Comprobar modelo con datos de test
+En este caso, se utiliza el test chi cuadrado para obtener la relevancia de las variables.
 
 ```{r}
-train_pred <- knn(train = datos1.correlation[,-ncol(datos)], test = datos1.correlation[,-ncol(datos)],cl = datos1.correlation$C, k=3)
-accuracy <- precision(train_pred,datos$C)
-accuracy
+pesosChi.squared <- FSelector::chi.squared(C~., datos)
+```
+
+```{r}
+subset.chisquared <- FSelector::cutoff.k(pesosChi.squared,20)
+datos2.chisquared <- datos[,subset.chisquared]
+datos2.chisquared$C <- datos$C
+test2.chisquared <- test[,subset.chisquared]
+```
+
+
+
+#entropy.based
+
+```{r}
+pesosEntropy.based <- FSelector::information.gain(C~., datos)
+```
+
+```{r}
+subset.entropybased<- FSelector::cutoff.k(pesosEntropy.based,20)
+datos3.entropybased <- datos[,subset.entropybased]
+datos3.entropybased$C <- datos$C
+test3.entropybased <- test[,subset.entropybased]
+```
+
+# oneR
+
+
+```{r}
+pesosOneR <- FSelector::oneR(C~., datos)
+```
+
+```{r}
+subset.oneR<- FSelector::cutoff.k(pesosOneR,20)
+datos4.oneR <- datos[,subset.oneR]
+datos4.oneR$C <- datos$C
+test4.oneR <- test[,subset.oneR]
+```
+
+#Random forest
+
+(copiado del pdf) El tercer argumento puede tener valor 1 ó 2, e indica el tipo de medida de importancia a
+usar: 1 (reducción en la media de fiabilidad predictiva) y 2 (reducción en la media de impureza
+de nodos).
+
+```{r}
+pesosRandomForest <- FSelector::random.forest.importance(C~.,datos, importance.type=1)
+```
+
+```{r}
+subset.RandomForest<- FSelector::cutoff.k(pesosRandomForest,20)
+datos5.RandomForest <- datos[,subset.RandomForest]
+datos5.RandomForest$C <- datos$C
+test5.RandomForest <- test[,subset.RandomForest]
+```
+
+#Resultados 
+
+
+```{r}
+selecciones <- data.frame(correlacion.lineal = subset.correlation,
+                          chi.squared = subset.chisquared,
+                          entropy.based = subset.entropybased,
+                          oneR = subset.oneR,
+                          randomForest = subset.RandomForest)
+selecciones
+```
+
+##Generación del modelo________________________________________________________________
+
+#1- Modelo con selección de variables por correlacion
+
+```{r}
+generarModelo <- function(train,test,k=3){
+  pred  <- knn(train = train[,-ncol(train)], test = test,cl = train$C, k)
+  pred
+}
+```
+
+Accuracy para los datos de train.
+
+```{r}
+train_pred.correlation <- generarModelo(train = datos1.correlation, test = datos1.correlation[,-ncol(datos1.correlation)],k=3)
+accuracy.correlation <- precision(train_pred.correlation,datos1.correlation$C)
+accuracy.correlation
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred.correlation <- train_pred <- generarModelo(train = datos1.correlation, test = test1.correlation,3)
 ```
 
 
 ```{r}
-test_pred <- knn(train = datos1.correlation[,-ncol(datos1.correlation)], test = test1.correlation,cl = datos1.correlation$C, k=3)
-test_pred
+generarEnvio(y=test_pred.correlation,file="envio.csv")
+```
+
+
+#2- Modelo con selección de variables por chi.squared
+
+Accuracy para los datos de train.
+
+```{r}
+train_pred.chisquared <- generarModelo(train = datos2.chisquared, test = datos2.chisquared[,-ncol(datos2.chisquared)],k=3)
+accuracy.chisquared <- precision(train_pred.chisquared,datos2.chisquared$C)
+accuracy.chisquared
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred.chisquared <- generarModelo(train = datos2.chisquared, test = test2.chisquared,3)
 ```
 
 
 ```{r}
-generarEnvio(y=test_pred,file="envio.csv")
+generarEnvio(y=test_pred.chisquared,file="envio.csv")
 ```
 
+
+#3- Modelo con selección de variables por entropia
+
+Por ahora no aplicaré este modelo porque difiere en uan sola varibale de la selección hecha con correlación, por lo que no creo que los resultados cambien mucho.z
+
+#4- Modelo con selección de variables por oneR
+
+Accuracy para los datos de train.
+
+```{r}
+train_pred.oneR <- generarModelo(train = datos4.oneR, test = datos4.oneR[,-ncol(datos4.oneR)],k=3)
+accuracy.oneR<- precision(train_pred.oneR,datos4.oneR$C)
+accuracy.oneR
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred.oneR <- generarModelo(train = datos4.oneR, test = test4.oneR,3)
+```
+
+
+
+```{r}
+generarEnvio(y=test_pred.oneR,file="envio.csv")
+```
+
+
+#4- Modelo con selección de variables por oneR
+
+Accuracy para los datos de train.
+
+```{r}
+train_pred.RandomForest <- generarModelo(train = datos5.RandomForest, test = datos5.RandomForest[,-ncol(datos5.RandomForest)],k=3)
+accuracy.RandomForest<- precision(train_pred.RandomForest,datos5.RandomForest$C)
+accuracy.RandomForest
+```
+
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred.RandomForest <- generarModelo(train = datos5.RandomForest, test = test5.RandomForest,3)
+```
+
+
+
+```{r}
+generarEnvio(y=test_pred.RandomForest,file="envio.csv")
+```
+
+#RESULTADOS
+
+
+
+```{r}
+resultados <- data.frame(modelo = c("correlacion","chisquared","oneR","RandomForest"),
+                         accuracy.train = c(accuracy.correlation,accuracy.chisquared,accuracy.oneR,
+                                            accuracy.RandomForest),
+                         accuracy.test = c(0.79938,0.81419,0.81725,0.81214))
+resultados
+```
