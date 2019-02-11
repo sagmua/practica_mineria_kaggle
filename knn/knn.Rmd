@@ -164,7 +164,6 @@ Para ver la importancia de las variables en relación a dicha medida vamos a usar
 
 ```{r}
 pesosCorrelacion <- FSelector::linear.correlation(C~., datos)
-print(pesosCorrelacion)
 ```
 
 ```{r}
@@ -400,6 +399,57 @@ datos <- datosSinRuido
 #Generación del modelo sin ruido
 
 
+Prueba con k = 3
+```{r}
+train_pred <- generarModelo(train = datos, test = datos[,-ncol(datos)],k=3)
+accuracyk3<- precision(train_pred,datos$C)
+accuracyk3
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos, test = test,3)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envio_k3.csv")
+```
+
+
+Prueba con k = 4
+```{r}
+train_pred <- generarModelo(train = datos, test = datos[,-ncol(datos)],k=4)
+accuracyk4<- precision(train_pred,datos$C)
+accuracyk4
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos, test = test,4)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envio_k4.csv")
+```
+
+
+#Resultados sin ruido y probando k=4,k=3
+
+```{r}
+resultados <- data.frame(modelo = c("k=3","k=4"),
+                         accuracy.train = c(accuracyk3,accuracyk4),
+                         accuracy.test = c(0.86421,0.86268))
+resultados
+```
+
+
+MODELO SIN ELIMINAR OUTLIERS POR SEPARADO, SOLO CON ELIMINACIÓN DE RUIDO
+
+
 ```{r}
 train_pred <- generarModelo(train = datos, test = datos[,-ncol(datos)],k=3)
 accuracy<- precision(train_pred,datos$C)
@@ -414,7 +464,84 @@ test_pred <- generarModelo(train = datos, test = test,3)
 
 
 ```{r}
-generarEnvio(y=test_pred,file="envio.csv")
+generarEnvio(y=test_pred,file="envio_con_outliers.csv")
 ```
 
+
+
+MODELO SIN ELIMINAR OUTLIERS POR SEPARADO, SOLO CON ELIMINACIÓN DE RUIDO Y CON SELECCION POR CORRELACION
+
+1.Aplicamos escalado
+2.imputamos valores
+3.Selecion de variables con la correlacion
+4. Eliminacion de ruido (suin previa eliminacion de outliers)
+
+```{r}
+datos <- datos1.correlation
+```
+
+
+```{r}
+datos$C <- as.factor(datos$C)
+```
+
+```{r}
+set.seed (1)
+out <- IPF(C~., data = datos ,s = 3)
+summary(out, explicit =TRUE)
+out$cleanData
+datosSinRuido <- datos[setdiff(1:nrow(datos),out$remIdx),]
+```
+
+
+```{r}
+cat("Se han eliminado ", dim(datos)[1]- dim(datosSinRuido)[1], "instancias")
+```
+
+```{r}
+datos <- datosSinRuido
+```
+
+```{r}
+corrplot(cor(datos[,-ncol(datos)]))
+```
+
+```{r}
+cor(datos[,-ncol(datos)])
+```
+
+Eliminaremos X26,X21,X15,X37,X24,X17,X32,X30,X7,X20,X47,X13
+
+,
+```{r}
+datos.sinCorrelados <- datos[,c("X16","X23","X27","X42","X3","X18","X12","X34","C")]
+test.sinCorrelados <- test[,c("X16","X23","X27","X42","X3","X18","X12","X34")]
+```
+
+
+```{r}
+corrplot(cor(datos.sinCorrelados[,-ncol(datos.sinCorrelados)]))
+```
+
+
+
+Generacion del modelo
+
+
+```{r}
+train_pred <- generarModelo(train = datos.sinCorrelados, test = datos.sinCorrelados[,-ncol(datos.sinCorrelados)],k=3)
+accuracy<- precision(train_pred,datos.sinCorrelados$C)
+accuracy
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos.sinCorrelados, test = test.sinCorrelados,3)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envio_sin_correlados.csv")
+```
 
