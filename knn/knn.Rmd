@@ -135,9 +135,6 @@ Al método siguiente solo se le puede pasar un argumento de menos de 10 dimension
 resOutliers <- mvoutlier::uni.plot(datos[1:10])
 ```
 
-```{r}
-print(resOutliers$outliers)
-```
 
 ```{r}
 datos <- datos[!resOutliers$outliers, ]
@@ -238,6 +235,7 @@ datos5.RandomForest <- datos[,subset.RandomForest]
 datos5.RandomForest$C <- datos$C
 test5.RandomForest <- test[,subset.RandomForest]
 ```
+
 
 #Resultados 
 
@@ -354,7 +352,7 @@ test_pred.RandomForest <- generarModelo(train = datos5.RandomForest, test = test
 generarEnvio(y=test_pred.RandomForest,file="envio.csv")
 ```
 
-#RESULTADOS
+#RESULTADOS DEL ESTUDIO DE SELECCION DE VARIABLES
 
 
 
@@ -365,3 +363,9 @@ resultados <- data.frame(modelo = c("correlacion","chisquared","oneR","RandomFor
                          accuracy.test = c(0.79938,0.81419,0.81725,0.81214))
 resultados
 ```
+
+CONCLUSION: Me quedaré con el conjunto de variables proporcionadas con oneR ya que es el que mejores resultados da en test.
+
+##DEtección de ruido.
+
+
