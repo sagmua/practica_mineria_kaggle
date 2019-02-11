@@ -15,6 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 #Librerías a usar y funciones útiles:
 library(dplyr)
 library(Hmisc)
+library(arules)
 library(mice)
 library(Amelia)
 library(PerformanceAnalytics)
@@ -24,6 +25,7 @@ library(VIM)
 library(RWeka)
 library ( NoiseFiltersR )
 library(FSelector)
+library(RKEEL)
 
 
 ##FUNCIONES AUXILIARES:
@@ -119,7 +121,7 @@ Si observamos, MICE no ha realizado la imputación sobre todas las variables de 
 #summary(datos)
 
 #IMPUTACION CON AMELIA:
-imputados.amelia <- Amelia::amelia(datos,m=2,parallel="multicore",noms="C")
+imputados.amelia <- Amelia::amelia(datos,m=1,parallel="multicore",noms="C")
 incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
 completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
 cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
@@ -133,6 +135,22 @@ Hemos reducido nuestro conjunto de datos a 11 variables predictoras, eliminando 
 Ya llegados a este punto, que hemos realizado la imputación de las variables con MICE y hemos reducido dimendsionalidad, hagamos un estudio de la correlación de las variables que tenemos ahora mismo en nuestro conjunto de datos. 
 
 Para ello vamos primero a emplear la correlación para mediante el paquete FSelector eliminar aquellas variables altamente correladas:
+
+
+Para ello realizamos una representación gráfica de las correlaciones entre las variables, de forma que a mayor amplitud del círculo mayor correlación existe, los colores fríos indican correlación directa y los cálidos inversa:
+
+
+```{r}
+# se encuentran aquellas variables que presentan valores de correlacion
+# por encima del valor umbral
+highlyCorrelated = caret :: findCorrelation(cor(datos) , cutoff =0.99)
+datos = datos[,-highlyCorrelated]
+corrplot(cor(datos))
+```
+Como vemos, tal como decíamos antes, no tenemos variables directamente altamente correladas, puesto que MICE hace ese filtrado durante el proceso de cálculo de las imputaciones. Pero por el otro lado, si vemos que tenemos muchas variables altamente inversamente correladas, es el caso por ejemplo de *X25* con *X44*, o con *X18*.
+
+
+
 ```{r}
 #Calculamos los pesos mediante la correlación linear con nuestra
 # variable clase 'C'
@@ -155,18 +173,11 @@ print(f)
 ```
 
 
-Para ello realizamos una representación gráfica de las correlaciones entre las variables, de forma que a mayor amplitud del círculo mayor correlación existe, los colores fríos indican correlación directa y los cálidos inversa:
-
-
-```{r}
-corrplot(cor(datos))
-```
-Como vemos, tal como decíamos antes, no tenemos variables directamente altamente correladas, puesto que MICE hace ese filtrado durante el proceso de cálculo de las imputaciones. Pero por el otro lado, si vemos que tenemos muchas variables altamente inversamente correladas, es el caso por ejemplo de *X25* con *X44*, o con *X18*.
-
-Por tanto esto nos indica que existe redundancia, puesto que las variables altamente correladas se explican entre sí. Por lo que podemos reducir estas mismas eliminando *X25* y *X44*:
+escalado:
 
 ```{r}
 #datos = datos[,!names(datos) %in% c("X25", "X44")]
+#datos [,-which(names(datos) == "C")] = scale(datos[,- which(names(datos) == "C")], center = TRUE, scale = TRUE)
 datos$C = as.factor(datos$C)
 ```
 
@@ -185,10 +196,10 @@ anomalos <- outliers::outlier(datos[,-ncol(datos)])
 print(anomalos)
 
 resOutliers1 <- mvoutlier::uni.plot(datos[1:10])
-resOutliers2 <- mvoutlier::uni.plot(datos[11:20])
-resOutliers3 <- mvoutlier::uni.plot(datos[21:30])
-resOutliers4 <- mvoutlier::uni.plot(datos[31:40])
-resOutliers2 <- mvoutlier::uni.plot(datos[c(41:44,46:50)])
+#resOutliers2 <- mvoutlier::uni.plot(datos[11:20])
+#resOutliers3 <- mvoutlier::uni.plot(datos[21:30])
+#resOutliers4 <- mvoutlier::uni.plot(datos[31:40])
+#resOutliers2 <- mvoutlier::uni.plot(datos[c(41:44,46:50)])
 
 
 
@@ -202,20 +213,21 @@ resOutliers2 <- mvoutlier::uni.plot(datos[c(41:44,46:50)])
 Llegados a este punto, donde el preprocesamiento está realizado, sólo nos queda obtener el mejor módelo basado en reglas de asociación mediante el algoritmo RIPPER que mejor se adapte a nuestro conjunto de datos:
 
 ```{r}
-datos [,-51] = scale(datos[,-51], center = TRUE, scale = TRUE)
-modelRipp <- JRip(C~.,data = datos)
-prediction = predict(modelRipp, datos[- out$remIdx, - which(names(datos) == "C")])
+#test = as.data.frame(scale(test, center = TRUE, scale = TRUE))
+#discretizar:
+#datos = discretization::disc.Topdown(datos, method=1)
+modelRipp <- JRip(f,data = datos)
+prediction = predict(modelRipp, datos)
 ```
 
 Calculamos la precisión para el conjunto train:
 ```{r}
-precision(predictionLabels = prediction, testLabels = datos$C[-out$remIdx])
+precision(predictionLabels = prediction, testLabels = datos$C)
 ```
 Generamos un primer envío, sin discretizar ni normalizar, ni outliers:
 ```{r}
 prediction = predict(modelRipp, test)
-generarEnvio(prediction, file = "seleccion2.csv")
-
+generarEnvio(prediction, file = "eliminadas muy correladas.csv")
 
 ```
 
