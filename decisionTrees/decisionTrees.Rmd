@@ -111,10 +111,77 @@ incompletas <- mice::nic(train)
 
 Tenemos un total de 7752 instancias completas y 1366 instancias a las que les falta al menos una característica, aproximadamente el 15% de las observaciones. En todas las variables hay presencia de missing values como hemos comentado antes (menos en la variable de clase, como es lógico), pero lo que es llamativo es que siguen una distribución peculiar. En todas las observaciones que tienen valores perdidos, sólo hay presencia de missing values en una característica. Además, también es llamativo el número de observaciones con missing values para cada atributo, ya que como hemos comentado antes parece que se han distribuido los valores perdidos de forma intencionada de modo que se han elegido un número de instancias aleatorias entre 15 y 50 (el número de variables) en las que se han colocado un missing value en alguna de sus características.
 
-## Árboles de decisión
 
-Generación de modelos de árboles de decisión  (...)
 
-```{r}
+## Árboles de decisión -> Muy vulnerables al ruido
+
+Los algoritmos típicos para árboles sin utilizar multiclasificadores son:
+  - Árboles utilizando el criterio GINI a la hora de decidir como hacer los cortes.
+  - Algoritmo ID3 el cual utiliza como criterio la entropía basándose en Gain, el cual no esta implementado en R a priori por lo que en principio no lo usaremos.
+  - Algoritmo C4.5 el cual utiliza como criterio la entropía basándose en el Gain Ratio, el cual mejora al anterior porque soluciona sus problemas y además trabaja bien con missing values.
+  
+Para comenzar, utilizaremos los tres algoritmos para obtener una referencia inicial de la tasa de error subiendola a kaggle. En primer lugar usaremos un tipo de arbol basando en GAIN, de la librería tree.
+
+```{r tree with gain}
+library(tree)
+
+set.seed (2)
+# Construyo el arbol sobre el conjunto de entrenamiento
+tree.train = tree(as.factor(C)~. ,train)
+#tree.train
+
+summary(tree.train)
+
+plot(tree.train)
+text(tree.train, pretty=0)
+
+#tree.train
+
+# Aplico el arbol sobre el conjunto de test
+tree.pred1 =predict(tree.train, test ,type ="class")
+
+#Aplicamos cv para intentar podar el árbol búscando el mejor número de nodos hoja.
+
+set.seed (3)
+cv.train = cv.tree(tree.train ,FUN=prune.misclass )
+names(cv.train )
+cv.train
+
+# Ahora podamos el arbol con prune.misclass
+prune.train =prune.misclass (tree.train ,best =4)
+par(mfrow =c(1,1))
+plot(prune.train)
+text(prune.train ,pretty =0)
+
+# Como se comportara este arbol en su capacidad de prediccion
+tree.pred=predict (prune.train , test ,type="class")
+
+table(tree.pred ,tree.pred1)
+
+setwd("~/GitHub/practica_mineria_kaggle")
+generarEnvio(tree.pred, path = "./decisionTrees/")
 
 ```
+
+A priori obtenemos que las características más importantes son X1, X27, X23 Y X32. Sin embargo, por validación cruzada hemos obtenido el mismo error utilizando 4 nodos que 5, así que podaremos aquí el árbol y por tanto descartaremos la variable x32. Si quitamos el nodo X23 podemos ver que también nos siguen dando buenos resultados, sin embargo producen mayor error, por lo que probraremos con los dos. Con los 4 nodos hemos obtenido un error del 0.84737.
+
+
+Ahora vamos a probar con el algoritmo C4.5 implementado en RWeka. Es interesante saber que en RWeka hay disponibles otres tres algoritmos de los cuales es posible utilizar solo dos de ellos (el otro es un multiclasificador).
+
+
+```{r c4.5 ini}
+library(partykit)
+library(RWeka)
+set.seed (2)
+
+modelC4.5 = J48(as.factor(C)~., train)
+
+modelC4.5.pred = predict(modelC4.5, test)
+
+
+
+```
+
+Hemos obtenido un error de 0.85400, por lo cual hemos mejorado un poco el anterior pero hemos empeorado nuestra marca anterior. 
+
+
