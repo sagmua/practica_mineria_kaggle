@@ -23,6 +23,7 @@ library(corrplot)
 library(VIM)
 library(RWeka)
 library ( NoiseFiltersR )
+library(FSelector)
 
 
 ##FUNCIONES AUXILIARES:
@@ -38,6 +39,18 @@ test = read.csv("../test.csv", na.string=c(" ", "NA", "?"))
 ```
 
 ### Valores perdidos y estudio de correlación
+
+Anted de comenzar con los valores perdidos, veamos si existen instancias duplicadas en nuestra base de datos:
+```{r}
+duplicados = duplicated(datos)
+length(which(duplicados))
+```
+Como vemos tenemos un total de 26 instancias duplicadas, osea, redundantes, asi que las suprimimos.
+```{r, include=FALSE}
+datos = datos[!duplicados,]
+```
+
+
 ```{r, include=FALSE}
 anyNA(datos)
 
@@ -45,7 +58,7 @@ anyNA(datos)
 numero_na = apply(datos,1, function(x) length(which(is.na(x))))
 
 ```
-Número de instancias con más de un valor perdido:
+Veamos ahora el número de instancias con más de un valor perdido:
 ```{r}
 nrow(datos[which(numero_na>1),])
 ```
@@ -89,25 +102,59 @@ En una primera aproximación, he decidido realizar la imputación de valores per
 
 De esta forma utilizamos una aproximación del valor perdido mucho más precisa que simplemente la media o mediana.
 ```{r, results="hide", echo=TRUE, warning=FALSE}
-imputados = mice::mice(datos, m=5, meth="pmm")
+#imputados = mice::mice(datos, m=5, meth="pmm")
 ```
 
 Aquellas variables donde se han realizado imputaciones mediante *PMM*:
 ```{r}
-imputados$method[imputados$method == "pmm"]
+#imputados$method[imputados$method == "pmm"]
 ```
 Si observamos, MICE no ha realizado la imputación sobre todas las variables de nuestro conjunto de datos eso implica que aún tenemos valores perdidos en los imputados. Pero si observamos el log vemos que ha ignorado las variables colineares, por tanto, podremos quedarnos con el conjunto de variables restantes ya imputadas, de forma que además de realizar la imputación, hemos hecho una selección de variables eliminando las redundantes (altamente colineares):
 
 ```{r}
-var_rest = names(imputados$method[imputados$method == "pmm"])
-datos = complete( imputados)
-datos = datos[,append(var_rest, "C")]
-summary(datos)
+#IMPUTACION CON MICE_
+#var_rest = names(imputados$method[imputados$method == "pmm"])
+#datos = complete( imputados)
+#datos = datos[,append(var_rest, "C")]
+#summary(datos)
+
+#IMPUTACION CON AMELIA:
+imputados.amelia <- Amelia::amelia(datos,m=2,parallel="multicore",noms="C")
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+datos <- imputados.amelia$imputations$imp1
 ```
 
 Hemos reducido nuestro conjunto de datos a 11 variables predictoras, eliminando aquellas altamente correladas.
 
-Ya llegados a este punto, que hemos realizado la imputación de las variables ocn MICE y hemos reducido dimendsionalidad, hagamos un estudio de la correlación de las variables que tenemos ahora mismo en nuestro conjunto de datos. 
+## Seleccion de características:
+
+Ya llegados a este punto, que hemos realizado la imputación de las variables con MICE y hemos reducido dimendsionalidad, hagamos un estudio de la correlación de las variables que tenemos ahora mismo en nuestro conjunto de datos. 
+
+Para ello vamos primero a emplear la correlación para mediante el paquete FSelector eliminar aquellas variables altamente correladas:
+```{r}
+#Calculamos los pesos mediante la correlación linear con nuestra
+# variable clase 'C'
+weights = FSelector::linear.correlation(C~., datos)
+barplot(weights$attr_importance, names.arg = rownames(weights), las=2)
+
+```
+Como podemos observar, la variable *X16*, *X23*, *X27* y *X42* son las variables que más correlación tienen respecto a la variable salida. Esto quiere decir que a priori explican mejor que el resto a esta, por lo que son considerados como buenos predictores para nuestro futuro modelo a generar.
+
+Seleccionemos ahora los 4 mejores atributos en función de los pesos:
+```{r}
+subset = cutoff.k(weights ,4)
+f = as.simple.formula(subset ,"C")
+weights = rank.correlation(C~.,datos)
+barplot(weights$attr_importance, names.arg = rownames(weights), las=2)
+
+subset = FSelector :: cutoff.k(weights ,9)
+f = as.simple.formula(subset ,"C")
+print(f)
+```
+
+
 Para ello realizamos una representación gráfica de las correlaciones entre las variables, de forma que a mayor amplitud del círculo mayor correlación existe, los colores fríos indican correlación directa y los cálidos inversa:
 
 
@@ -124,11 +171,28 @@ datos$C = as.factor(datos$C)
 ```
 
 Eliminación de ruido:
-```{r, echo=FALSE}
+```{r, include=FALSE}
 set.seed (1)
 out = IPF(C~., data = datos , nfolds=5, s = 3)
 summary(out, explicit =TRUE)
 identical(out$cleanData , datos[ setdiff (1:nrow(datos) ,out$remIdx) ,])
+datos = out$cleanData
+```
+
+## Datos anómalos:
+```{r}
+anomalos <- outliers::outlier(datos[,-ncol(datos)])
+print(anomalos)
+
+resOutliers1 <- mvoutlier::uni.plot(datos[1:10])
+resOutliers2 <- mvoutlier::uni.plot(datos[11:20])
+resOutliers3 <- mvoutlier::uni.plot(datos[21:30])
+resOutliers4 <- mvoutlier::uni.plot(datos[31:40])
+resOutliers2 <- mvoutlier::uni.plot(datos[c(41:44,46:50)])
+
+
+
+
 
 ```
 
@@ -138,8 +202,9 @@ identical(out$cleanData , datos[ setdiff (1:nrow(datos) ,out$remIdx) ,])
 Llegados a este punto, donde el preprocesamiento está realizado, sólo nos queda obtener el mejor módelo basado en reglas de asociación mediante el algoritmo RIPPER que mejor se adapte a nuestro conjunto de datos:
 
 ```{r}
-modelRipp <- JRip(C~.,data = out$cleanData)
-prediction = predict(modelRipp, datos[- out$remIdx,- which(names(datos) == "C")])
+datos [,-51] = scale(datos[,-51], center = TRUE, scale = TRUE)
+modelRipp <- JRip(C~.,data = datos)
+prediction = predict(modelRipp, datos[- out$remIdx, - which(names(datos) == "C")])
 ```
 
 Calculamos la precisión para el conjunto train:
@@ -149,7 +214,9 @@ precision(predictionLabels = prediction, testLabels = datos$C[-out$remIdx])
 Generamos un primer envío, sin discretizar ni normalizar, ni outliers:
 ```{r}
 prediction = predict(modelRipp, test)
-generarEnvio(prediction, file = "con_todos_sin_ruido.csv")
+generarEnvio(prediction, file = "seleccion2.csv")
+
+
 ```
 
 

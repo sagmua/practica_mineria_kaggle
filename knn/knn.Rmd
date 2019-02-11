@@ -59,7 +59,7 @@ test <- predict(datosPrep,test)
 
 
 
-#Imputación de valores perdidos.
+#Imputaci?n de valores perdidos.
 
 En primer lugar, vamos a eliminar las instancias qeu tienen un porcentaje de valores peridos superior aun umbral previamente establecido.
 
@@ -121,7 +121,7 @@ cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
 datos <- imputados.amelia$imputations$imp1
 ```
 
-#Detección de datos anómalos
+#Detecci?n de datos an?malos
 
 
 ```{r}
@@ -129,7 +129,7 @@ anomalos <- outliers::outlier(datos[,-ncol(datos)])
 print(anomalos)
 ```
 
-Al método siguiente solo se le puede pasar un argumento de menos de 10 dimensiones, por lo que si queremos ver todos los outliers que hay en todas las variables, tenemos que ponerals por separado. Además, solo considera los outliers de una dimensión, es decir, que no detecta outliers qeu estén provocados por una combiación anómala de valores de un conjhunto de variables.
+Al m?todo siguiente solo se le puede pasar un argumento de menos de 10 dimensiones, por lo que si queremos ver todos los outliers que hay en todas las variables, tenemos que ponerals por separado. Adem?s, solo considera los outliers de una dimensi?n, es decir, que no detecta outliers qeu est?n provocados por una combiaci?n an?mala de valores de un conjhunto de variables.
 
 ```{r}
 resOutliers <- mvoutlier::uni.plot(datos[1:10])
@@ -141,17 +141,17 @@ datos <- datos[!resOutliers$outliers, ]
 ```
 
 
-##Selección de caracteristicas
+##Selecci?n de caracteristicas
 
-La selección de características es una técnica para reducir la diimensionalidad muy utilizada. Cuando realizamos esta tares obtenemos modelos más rápidos (hay menos datos), con mayor exactitud ya que la generalización es mayor y obtenemos unos resultados más simples.
+La selecci?n de caracter?sticas es una t?cnica para reducir la diimensionalidad muy utilizada. Cuando realizamos esta tares obtenemos modelos m?s r?pidos (hay menos datos), con mayor exactitud ya que la generalizaci?n es mayor y obtenemos unos resultados m?s simples.
 
-Para realizar esta tarea hay diferentes criterios y diferentes algoritmos. Vamos a probar con algunos de ellos para ver qué selección funciona mejor para el algoritmo de estudio. En primer lugar se aplicarán medidas para eliminar variables y a continuación veremos si con algún algoritmo más completo podemos obtener mejores resultados.
+Para realizar esta tarea hay diferentes criterios y diferentes algoritmos. Vamos a probar con algunos de ellos para ver qu? selecci?n funciona mejor para el algoritmo de estudio. En primer lugar se aplicar?n medidas para eliminar variables y a continuaci?n veremos si con alg?n algoritmo m?s completo podemos obtener mejores resultados.
 
-#Correlación lineal
+#Correlaci?n lineal
 
-EL MODELO OBTENIDO NOS DA UN ACCURACY EN TRAIN DE 0.9995869 Y EN TEST DE 0.79989 POR LO QUE PODEMOS DECIR QUE EL MODELO SOBREAJUSTA. -> NOTA: Habría que ver si hay que eliminar menos variables o más.
+EL MODELO OBTENIDO NOS DA UN ACCURACY EN TRAIN DE 0.9995869 Y EN TEST DE 0.79989 POR LO QUE PODEMOS DECIR QUE EL MODELO SOBREAJUSTA. -> NOTA: Habr?a que ver si hay que eliminar menos variables o m?s.
 
-En primer lugar, vamos a estudiar la importancia de las variables que teemos en el problema. Para ello, en primera instancia, veremos como de correladas están entre sí. Eliminaremos aquiellas que están más correladas.
+En primer lugar, vamos a estudiar la importancia de las variables que teemos en el problema. Para ello, en primera instancia, veremos como de correladas est?n entre s?. Eliminaremos aquiellas que est?n m?s correladas.
 
 
 ```{r}
@@ -159,7 +159,7 @@ y = cor(datos)
 corrplot(y,type="upper")
 ```
 
-Para ver la importancia de las variables en relación a dicha medida vamos a usar el paquete FSelector. En primer lugar calculamos los pesos de todas las variables y después me quedaré con las 20 mejores.
+Para ver la importancia de las variables en relaci?n a dicha medida vamos a usar el paquete FSelector. En primer lugar calculamos los pesos de todas las variables y despu?s me quedar? con las 20 mejores.
 
 ```{r}
 pesosCorrelacion <- FSelector::linear.correlation(C~., datos)
@@ -221,8 +221,8 @@ test4.oneR <- test[,subset.oneR]
 
 #Random forest
 
-(copiado del pdf) El tercer argumento puede tener valor 1 ó 2, e indica el tipo de medida de importancia a
-usar: 1 (reducción en la media de fiabilidad predictiva) y 2 (reducción en la media de impureza
+(copiado del pdf) El tercer argumento puede tener valor 1 ? 2, e indica el tipo de medida de importancia a
+usar: 1 (reducci?n en la media de fiabilidad predictiva) y 2 (reducci?n en la media de impureza
 de nodos).
 
 ```{r}
@@ -249,9 +249,9 @@ selecciones <- data.frame(correlacion.lineal = subset.correlation,
 selecciones
 ```
 
-##Generación del modelo________________________________________________________________
+##Generaci?n del modelo________________________________________________________________
 
-#1- Modelo con selección de variables por correlacion
+#1- Modelo con selecci?n de variables por correlacion
 
 ```{r}
 generarModelo <- function(train,test,k=3){
@@ -268,7 +268,7 @@ accuracy.correlation <- precision(train_pred.correlation,datos1.correlation$C)
 accuracy.correlation
 ```
 
-Cálculo de etiquetas del test
+C?lculo de etiquetas del test
 
 ```{r}
 test_pred.correlation <- train_pred <- generarModelo(train = datos1.correlation, test = test1.correlation,3)
@@ -280,7 +280,7 @@ generarEnvio(y=test_pred.correlation,file="envio.csv")
 ```
 
 
-#2- Modelo con selección de variables por chi.squared
+#2- Modelo con selecci?n de variables por chi.squared
 
 Accuracy para los datos de train.
 
@@ -290,7 +290,7 @@ accuracy.chisquared <- precision(train_pred.chisquared,datos2.chisquared$C)
 accuracy.chisquared
 ```
 
-Cálculo de etiquetas del test
+C?lculo de etiquetas del test
 
 ```{r}
 test_pred.chisquared <- generarModelo(train = datos2.chisquared, test = test2.chisquared,3)
@@ -302,11 +302,11 @@ generarEnvio(y=test_pred.chisquared,file="envio.csv")
 ```
 
 
-#3- Modelo con selección de variables por entropia
+#3- Modelo con selecci?n de variables por entropia
 
-Por ahora no aplicaré este modelo porque difiere en uan sola varibale de la selección hecha con correlación, por lo que no creo que los resultados cambien mucho.z
+Por ahora no aplicar? este modelo porque difiere en uan sola varibale de la selecci?n hecha con correlaci?n, por lo que no creo que los resultados cambien mucho.z
 
-#4- Modelo con selección de variables por oneR
+#4- Modelo con selecci?n de variables por oneR
 
 Accuracy para los datos de train.
 
@@ -316,7 +316,7 @@ accuracy.oneR<- precision(train_pred.oneR,datos4.oneR$C)
 accuracy.oneR
 ```
 
-Cálculo de etiquetas del test
+C?lculo de etiquetas del test
 
 ```{r}
 test_pred.oneR <- generarModelo(train = datos4.oneR, test = test4.oneR,3)
@@ -329,7 +329,7 @@ generarEnvio(y=test_pred.oneR,file="envio.csv")
 ```
 
 
-#4- Modelo con selección de variables por oneR
+#4- Modelo con selecci?n de variables por oneR
 
 Accuracy para los datos de train.
 
@@ -340,7 +340,7 @@ accuracy.RandomForest
 ```
 
 
-Cálculo de etiquetas del test
+C?lculo de etiquetas del test
 
 ```{r}
 test_pred.RandomForest <- generarModelo(train = datos5.RandomForest, test = test5.RandomForest,3)
