@@ -17,6 +17,16 @@ library(Hmisc)
 library(mice)
 library(ggplot2)
 library(caret)
+library(lattice)
+library(VIM)
+library(Amelia)
+library(partykit)
+library(RWeka)
+library(tree)
+require(robCompositions)
+library(NoiseFiltersR)
+library(outliers)
+require(mvoutlier)
 
 #Funciones auxiliares:
 setwd("~/GitHub/practica_mineria_kaggle")
@@ -32,9 +42,11 @@ En primer lugar haremos la lectura de los datos.
 #lectura de datos:
 setwd("~/GitHub/practica_mineria_kaggle")
 train = read.csv("train.csv", na.string=c(" ", "NA", "?"))
+
 test = read.csv("test.csv", na.string=c(" ", "NA", "?"))
 #Pasamos a formato TIBBLE:
 train = as_tibble(train)
+train$C = as.factor(train$C)
 test = as_tibble(test)
 dim(train)
 dim(test)
@@ -69,11 +81,16 @@ Como hemos observado teníamos algunas observaciones repetidas, así que las hem
 Ahora vamos a observar la proporción de la variable de clase con respecto a su presencia en las distintas observaciones para comprobar si existe desbalanceo en el problema.
 
 ```{r proporcionClase}
-proporcion = group_by(train,C) %>% summarise(round((nc = (n() * 100)/dim(train)[1]),digits = 1))
-proporcion
-ggplot(data = train) + 
-  geom_bar(mapping = aes(x = C, y = ..prop.., group = 1))
 
+proporcion = group_by(train,C) %>% summarise(propo = round((nc = (n() * 100)/dim(train)[1]),digits = 1))
+proporcion
+
+df <- data.frame(clase=proporcion$C,
+                proporcion=proporcion$propo)
+
+p<-ggplot(df, aes(x=clase, y=proporcion, fill=clase)) +
+  geom_bar(stat="identity")+theme_minimal()
+p
 
 ```
 
@@ -105,12 +122,155 @@ completas <- mice::ncc(train)
 incompletas <- mice::nic(train)
 
 
-#completas
-#incompletas
+completas
+incompletas
 ```
 
-Tenemos un total de 7752 instancias completas y 1366 instancias a las que les falta al menos una característica, aproximadamente el 15% de las observaciones. En todas las variables hay presencia de missing values como hemos comentado antes (menos en la variable de clase, como es lógico), pero lo que es llamativo es que siguen una distribución peculiar. En todas las observaciones que tienen valores perdidos, sólo hay presencia de missing values en una característica. Además, también es llamativo el número de observaciones con missing values para cada atributo, ya que como hemos comentado antes parece que se han distribuido los valores perdidos de forma intencionada de modo que se han elegido un número de instancias aleatorias entre 15 y 50 (el número de variables) en las que se han colocado un missing value en alguna de sus características.
 
+```{r other function nas, include = false }
+
+
+# Referencias a los paquetes necesarios para disponer
+# del conjunto de datos y de la funcion de visualizacion # del patron de datos perdidos
+require(VIM)
+#Se visualiza un grafico que nos indica la forma en que se distribuyen los # datos perdidos
+datos = airquality
+# se genera el grafico de distribucion de datos perdidos . Solo 
+# se consideran las variables con datos perdidos
+plot = aggr(train , col=c("blue","red") , numbers=TRUE, sortVars=TRUE,labels=names(train), cex.axis=.5, gap=1, ylab=c("Grafico de datos perdidos","Patron"))
+
+
+```
+```{r Amelia}
+cat("Datos completos: ",completas, " e incompletos: ",incompletas,"\n")
+missmap(train[1:300,1:20], col= c("red","steelBlue"))
+
+```
+
+Tenemos un total de 7752 instancias completas y 1366 instancias a las que les falta al menos una característica, aproximadamente el 15% de las observaciones. En todas las variables hay presencia de missing values como hemos comentado antes (menos en la variable de clase, como es lógico), pero lo que es llamativo es que siguen una distribución peculiar. En todas las observaciones que tienen valores perdidos, sólo hay presencia de missing values en una característica. Además, también es llamativo el número de observaciones con missing values para cada atributo, ya que como hemos comentado antes parece que se han distribuido los valores perdidos de forma intencionada de modo que se han elegido un número de instancias aleatorias entre 15 y 50 (el número de variables) en las que se han colocado un missing value en alguna de sus características. Cabe destacar que en el test, como hemos comentado antes, no tienen missing values y todas sus observaciones son completas.
+
+Debido a que aproximadamente tenemos un 10% del conjunto de observaciones con valores perdidos y que estos están distribuidos por todas las características, no debemos de eliminar ni dichas observaciones ni dichos atributos porque supondría una enorme perdida de información. Por tanto, debemos de llevar a cabo algunas técnicas de imputación para poder lidiar con estos. 
+
+En primer lugar empezaremos aplicando métodos de imputación del paquete mice, en concreto partiremos del método cart el cual se corresponde con una imputación por medio de árboles. Conviene utilizar algún método de este tipo o más complejo debido a que si sustiuimos por la media o la desviación no lleva a unos resultados precisos. Estos métodos más complejos de imputación consiste en generar conjuntos de datos aleatorios en diferentes particiones (las cuales indicamos con el parametro m de mice, batch) de forma que las imputaciones se van realizando sobre ellas. De esta forma, cada imputación realizada sobre una partición se utiliza para la siguiente, así se obtienen resultados cada vez más precisos.
+
+```{r imputacion mice}
+#methods(mice)
+# se realiza la imputacion
+# 5 batch (series) diferentes de imputaciones. El método pmm es el de imputación que se utiliza
+imputados <- mice::mice(train, m=5, meth="cart", parallel = "multicore")
+
+# se completa el conjunto de datos con las imputaciones
+datosImputados <- mice::complete(imputados)
+
+
+# se determina el numero de instancias sin datos perdidos y con datos
+# perdidos en la parte ya limpia
+completos <- mice::ncc(datosImputados)
+incompletos <- mice::nic(datosImputados)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+
+
+
+```
+
+El algoritmo mice está diseñado para descartar las variables correladas, por lo que un punto fuerte de este método es que al no tener en cuenta las variables correladas este prescinde de ellas automáticamente por lo que se reduce la dimensionalidad del conjunto de datos. 
+
+Sin embargo, aunque hemos aplicado mice no se completan todas las observaciones debido a lo que hemos comentadop anteriormente. Por tanto, procederemos a utilizar el paquete Amelia, el cual no ignora estas variables y por tanto puede funcionar mejor. De todas formas, posteriormente haremos un estudio exhausto de correlación para comprobar que ocurre realmente.
+
+```{r imputados amelia}
+
+
+imputados.amelia <- Amelia::amelia(train,m=5,parallel="multicore",noms="C")
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp5)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp5)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+datosImputadosAmelia <- imputados.amelia$imputations$imp5
+```
+
+
+Como podemos observar, el resultado de esta imputación si que nos imputa todos los valores perdidos y por tanto ya tenemos todas las instancias del conjunto de datos completas.
+
+Ahora aplicaremos el paquete RobCompositions, el cual realiza imputación utilizando Knn, para intentar mejorar la imputación realizada anteriormente.
+
+
+```{r imputacion RobCompositions}
+
+
+# se hace la imputacion
+imputados <- robCompositions::impKNNa(train, primitive=TRUE)
+
+# Ahora puede visualizarse alguna informacion sobre la forma
+# en que se hizo la imputacion. El segundo argumento indica el
+# tipo de grafico a obtener
+plot(imputados, which=2)
+
+# El conjunto de datos completo puede accederse de la siguiente forma
+datosImputadosRobCompositions =  imputados$xImp
+
+# se determina el numero de instancias sin datos perdidos y con datos
+# perdidos. A observar la comodidad de uso de las funciones ncc e nic
+completos <- mice::ncc(datosImputadosRobCompositions)
+incompletos <- mice::nic(datosImputadosRobCompositions)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+
+```
+Como podemos observar, con este paquete también obtenemos el conjunto de datos con todos los valores imputados. Según el gráfico casi todas las variables imputadas siguen un patron similar, excepto en algunos casos.
+
+Con esto terminaríamos la imputación de los datos a priori, a la hora de decidir con cual nos quedaremos de las 3 imputaciones, en cuanto a resultados podríamos quedarnos con Amelia o RobCompositions. ---- LUEGO DECIDIMOS----
+
+### Detección de Ruido
+
+Una parte esencial del preprocesamiento de los datos es la detección de ruido. Algunos métodos son especialmente vulnerables al ruido, entre ellos se encuentran los árboles de decisión. El ruido básicamente se trata de la presenecia de valores que son distintos de los esperados en algunas variables de las instancias del conjunto de datos. Por tanto, el paso que haremos a continuación será analizar nuestro conjunto de datos de entrenamiento con el fin de detectar posible ruido y por tanto intentar suavizarlo. 
+
+Para ello usaremos uno de los algoritmos más eficaces en este campo, Iterative Partitioning Filter. Este algoritmo se centra en el ruido de clase, por lo que su función es eliminar instancias mal etiquetas. Realiza varias iteracciones hasta alcanzar una condición de parada que suele ser que el número de instancias consideradas como ruido esté por debajo de cierto umbral. 
+
+```{r ruido}
+
+# se inicializa la semilla aleatoria para reproducir los resultados
+set.seed(1)
+
+datos = as.data.frame(datosImputadosAmelia)
+
+datos$C = as.factor(datos$C)
+# se aplica el algoritmo 
+out <- IPF(C~., data = datos, s = 2)
+
+# se muestran los indices de las instancias con ruido
+#summary(out, explicit = TRUE)
+
+# el conjunto de datos sin ruido se obtiene de la siguiente forma
+out$cleanData
+
+# tambien podriamos obtenerlo de forma directa eliminando los
+# indices de las instancias consideradas como ruidosas
+datosSinRuido <- datos[setdiff(1:nrow(datos),out$remIdx),]
+
+datosSinRuido = as.data.frame(datosSinRuido)
+str(datosSinRuido)
+
+
+```
+
+Como podemos observar, se han detectado 1572 instancias con ruido y por tanto las hemos eliminado, aproximadamente un 17% del conjunto de datos era ruido. Atendiendo a esto, podemos afirmar que el ruido ha sido introducido de forma intencionada en el dataset siguiendo alguno de los métodos de introducción de ruido existentes.
+
+
+### Anomalías
+
+Después de comparar los resultados en kaggle, hemos conseguido mejorar la precisión de nuestro clasificador al suavizar el ruido del dataset de entrenamiento. Sin embargo, en los conjuntos de datos pueden existir otro tipo de valores erróneos que no se pueden considerar ruido. Estos valores se corresponden con los de aquellas instancias cuyas características son muy diferentes con respecto a la mayoría de los demás datos, por tanto se denominan outliers o valores extremos. En ocasiones, su presencia es producida por errores en la recogida de los datos 
+
+En general, los algoritmos de árboles de clasificación no son muy sensibles a outliers, ya que al poder tratar con variables continuas establecen particiones en los dominios teniendo en cuenta valores límite (outliers). Por tanto, no vamos a realizar este proceso ya que seguramente no obtengamos ninguna mejora en nuestro clasificador.
+
+
+
+### Correlación
+
+El paquete mice nos ha permitido darnos cuenta de que existen variables correladas en el conjunto de datos, por lo que pasaremos ahora a analizar la correlación del conjunto de datos.
+
+
+### Reducción de los datos
+
+
+....
 
 
 ## Árboles de decisión -> Muy vulnerables al ruido
@@ -123,11 +283,10 @@ Los algoritmos típicos para árboles sin utilizar multiclasificadores son:
 Para comenzar, utilizaremos los tres algoritmos para obtener una referencia inicial de la tasa de error subiendola a kaggle. En primer lugar usaremos un tipo de arbol basando en GAIN, de la librería tree.
 
 ```{r tree with gain}
-library(tree)
 
 set.seed (2)
 # Construyo el arbol sobre el conjunto de entrenamiento
-tree.train = tree(as.factor(C)~. ,train)
+tree.train = tree(as.factor(C)~. ,datosSinRuido)
 #tree.train
 
 summary(tree.train)
@@ -148,7 +307,7 @@ names(cv.train )
 cv.train
 
 # Ahora podamos el arbol con prune.misclass
-prune.train =prune.misclass (tree.train ,best =4)
+prune.train =prune.misclass (tree.train ,best =5)
 par(mfrow =c(1,1))
 plot(prune.train)
 text(prune.train ,pretty =0)
@@ -165,23 +324,101 @@ generarEnvio(tree.pred, path = "./decisionTrees/")
 
 A priori obtenemos que las características más importantes son X1, X27, X23 Y X32. Sin embargo, por validación cruzada hemos obtenido el mismo error utilizando 4 nodos que 5, así que podaremos aquí el árbol y por tanto descartaremos la variable x32. Si quitamos el nodo X23 podemos ver que también nos siguen dando buenos resultados, sin embargo producen mayor error, por lo que probraremos con los dos. Con los 4 nodos hemos obtenido un error del 0.84737.
 
+```{r tree with gain}
+
+
+#### PRUEBAS PARTICIONANDO EL TRAIN
+
+
+library(tree)
+
+set.seed (2)
+
+# Dividir en training y test
+train.train= sample (1:nrow(train), (dim(train)[1]%/%3))
+train.test = train [-train.train ,]
+
+
+# Construyo el arbol sobre el conjunto de entrenamiento
+tree.train = tree(as.factor(C)~. , data = train, subset = train.train)
+#tree.train
+
+summary(tree.train)
+
+plot(tree.train)
+text(tree.train, pretty=0)
+
+#tree.train
+
+
+# Aplico el arbol sobre el conjunto de test
+tree.pred1 =predict(tree.train, train.test ,type ="class")
+table(tree.pred1 , train.test$C)
+
+precision(tree.pred1,train.test$C)
+
+#Aplicamos cv para intentar podar el árbol búscando el mejor número de nodos hoja.
+
+set.seed (3)
+cv.train = cv.tree(tree.train ,FUN=prune.misclass )
+names(cv.train )
+cv.train
+
+# Ahora podamos el arbol con prune.misclass
+prune.train =prune.misclass (tree.train ,best =4)
+par(mfrow =c(1,1))
+plot(prune.train)
+text(prune.train ,pretty =0)
+
+# Como se comportara este arbol en su capacidad de prediccion
+tree.pred=predict (prune.train , train.test ,type="class")
+
+table(tree.pred,train.test$C)
+
+precision(tree.pred,train.test$C)
+
+
+```
+
 
 Ahora vamos a probar con el algoritmo C4.5 implementado en RWeka. Es interesante saber que en RWeka hay disponibles otres tres algoritmos de los cuales es posible utilizar solo dos de ellos (el otro es un multiclasificador).
 
 
 ```{r c4.5 ini}
-library(partykit)
-library(RWeka)
+
 set.seed (2)
 
-modelC4.5 = J48(as.factor(C)~., train)
+modelC4.5 = J48(C~., datosSinRuido)
 
 modelC4.5.pred = predict(modelC4.5, test)
 
+setwd("~/GitHub/practica_mineria_kaggle")
+generarEnvio(modelC4.5.pred, path = "./decisionTrees/")
+
+######## probando a particionar nuestro conjunto train
+set.seed (2)
+
+# Dividir en training y test
+train.train= sample (1:nrow(datosImputadosAmelia), (dim(datosImputadosAmelia)[1]%/%3))
+train.test = datosImputadosAmelia [-train.train ,]
+
+modelC4.5 = J48(as.factor(C)~., data= datosImputadosAmelia, subset = train.train)
+
+modelC4.5.pred = predict(modelC4.5, train.test)
+
+precision(modelC4.5.pred, train.test$C)
 
 
 ```
 
+
 Hemos obtenido un error de 0.85400, por lo cual hemos mejorado un poco el anterior pero hemos empeorado nuestra marca anterior. 
 
 
+###
+Notas de subidas después de preprocesar:
+1. Hemos obtenido mejor puntuación después de hacer la imputación con amelia con el método ctree, ya que C4.5 ya trata de por si los missing values ignorandolo y baja a 0.83. Hemos obtenido un accuracy de: 0.86064 
+2. Con C4.5 hemos obtenido una mejor solución con los imputados del mice, sin embargo con ctree sigue dándonos mejor resultado con camelia.
+3. Con el paquete RobCompositions con ctree hemos obtenido el mismo resultado que para amelia, mientras que con C4.5  hemos conseguido un valor de 0.85706 lo que mejora el anterior algoritmo. Por tanto será interesante seguir con estos resultados.
+4. Con ctree después de haber eliminado las instancias con ruido hemos conseguido un acierot del 0.86 pero con c4.5 hemos mejorado hasta casi el 0.87. Solo hemos probado con las de robcompositions.
+5. Con ctree después de haber eliminado el ruido nos encontramos que el algoritmo no supera el 0.86. Sin embargo con Amelia y C4.5 hemos podido comprobar que mejora hasta 0.87850 lo que nos daría la mejor puntuación hasta el momento conseguida.
