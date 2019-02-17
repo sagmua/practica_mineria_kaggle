@@ -545,3 +545,63 @@ test_pred <- generarModelo(train = datos.sinCorrelados, test = test.sinCorrelado
 generarEnvio(y=test_pred,file="envio_sin_correlados.csv")
 ```
 
+
+#Uso de BORUTA para seleción de caracteristicas
+
+Empiezo otra vez de 0 con los datos 
+
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+```
+
+
+Imputación de valores perdidos.
+
+```{r}
+imputados.amelia <- Amelia::amelia(datos,m=1,parallel="multicore",noms="C")
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+datos <- imputados.amelia$imputations$imp1
+```
+
+Escalado y centrado
+
+```{r}
+datosPrep <- caret::preProcess(datos[,-ncol(datos)],method = c("center","scale"))
+datos[,-ncol(datos)] <- predict(datosPrep,datos[,-ncol(datos)])
+datosPrep <- caret::preProcess(test,method = c("center","scale"))
+test <- predict(datosPrep,test)
+```
+
+
+Eliminacion de ruido
+
+```{r}
+set.seed (1)
+datos$C <- as.factor(datos$C)
+out <- IPF(C~., data = datos ,s = 3)
+summary(out, explicit =TRUE)
+out$cleanData
+datosSinRuido <- datos[setdiff(1:nrow(datos),out$remIdx),]
+cat("Se han eliminado ", dim(datos)[1]- dim(datosSinRuido)[1], "instancias")
+datos <- datosSinRuido
+```
+
+Aplicación de boruta para seleccion de instancias
+
+```{r}
+library(Boruta)
+```
+
+```{r}
+b <- Boruta(C~.,data=datos,doTrace=2)
+```
+
+```{r}
+print(b)
+```
+
+Guau.
