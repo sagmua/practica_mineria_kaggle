@@ -612,15 +612,17 @@ Como vemos, el problema está bastante desbalanceado.
 library(unbalanced)
 ```
 
+TOMEK LINKS
+
 ```{r}
 balanced <- ubTomek(datos[,-ncol(datos)],datos$C)
 ```
 
 
 ```{r}
-data <- balanced$X
-data$C <- balanced$Y
-table(data$C)
+datos.balanceados <- balanced$X
+datos.balanceados$C <- balanced$Y
+table(datos.balanceados$C)
 ```
 
 
@@ -628,18 +630,58 @@ Generacion del modelo
 
 
 ```{r}
-train_pred <- generarModelo(train = datos.sinCorrelados, test = datos.sinCorrelados[,-ncol(datos.sinCorrelados)],k=3)
-accuracy<- precision(train_pred,datos.sinCorrelados$C)
+train_pred <- generarModelo(train = datos.balanceados, test = datos.balanceados[,-ncol(datos.balanceados)],k=3)
+accuracy<- precision(train_pred,datos.balanceados$C)
 accuracy
 ```
 
 Cálculo de etiquetas del test
 
 ```{r}
-test_pred <- generarModelo(train = datos.sinCorrelados, test = test.sinCorrelados,3)
+test_pred <- generarModelo(train = datos.balanceados, test = test,3)
 ```
 
 
 ```{r}
-generarEnvio(y=test_pred,file="envio_sin_correlados.csv")
+generarEnvio(y=test_pred,file="envio_tomek_links.csv")
 ```
+
+
+UNDERSAMPLING
+
+```{r}
+balanced <- ubUnder(X=datos[,-ncol(datos)], Y= datos$C, perc = 40, method = "percPos")
+```
+
+```{r}
+datos.undersampling <- balanced$X
+datos.undersampling$C <- balanced$Y
+table(datos.undersampling$C)
+```
+
+
+
+Generacion del modelo
+
+
+```{r}
+train_pred <- generarModelo(train = datos.undersampling, test = datos.undersampling[,-ncol(datos.undersampling)],k=3)
+accuracy<- precision(train_pred,datos.undersampling$C)
+accuracy
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos.undersampling, test = test,3)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envio_undersampling.csv")
+```
+
+
+OVERSAMPLING
+
+
