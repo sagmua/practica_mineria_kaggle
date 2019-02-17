@@ -20,6 +20,11 @@ library(corrplot)
 library(NoiseFiltersR)
 
 source("../funcionesAux.R")
+
+generarModelo <- function(train,test,k=3){
+  pred  <- knn(train = train[,-ncol(train)], test = test,cl = train$C, k)
+  pred
+}
 ```
 
 ```{r}
@@ -253,12 +258,6 @@ selecciones
 
 #1- Modelo con selección de variables por correlacion
 
-```{r}
-generarModelo <- function(train,test,k=3){
-  pred  <- knn(train = train[,-ncol(train)], test = test,cl = train$C, k)
-  pred
-}
-```
 
 Accuracy para los datos de train.
 
@@ -546,7 +545,7 @@ generarEnvio(y=test_pred,file="envio_sin_correlados.csv")
 ```
 
 
-#Uso de BORUTA para seleción de caracteristicas
+#Desbalanceo de datos
 
 Empiezo otra vez de 0 con los datos 
 
@@ -590,18 +589,57 @@ cat("Se han eliminado ", dim(datos)[1]- dim(datosSinRuido)[1], "instancias")
 datos <- datosSinRuido
 ```
 
-Aplicación de boruta para seleccion de instancias
+```{r}
+corrplot(cor(datos[,-ncol(datos)]))
+```
+
+Voy a dejar solo las variables X3,X12,,X16,X23,X27,X34,X41,X42
 
 ```{r}
-library(Boruta)
+datos <- datos[,c("X3","X12","X16","X23","X27","X34","X41","X42","C")]
+test <- test[,c("X3","X12","X16","X23","X27","X34","X41","X42")]
+```
+
+Proporcion de datos de cada clase:
+
+```{r}
+table(datos$C)
+```
+
+Como vemos, el problema está bastante desbalanceado. 
+
+```{r}
+library(unbalanced)
 ```
 
 ```{r}
-b <- Boruta(C~.,data=datos,doTrace=2)
+balanced <- ubTomek(datos[,-ncol(datos)],datos$C)
 ```
+
 
 ```{r}
-print(b)
+data <- balanced$X
+data$C <- balanced$Y
+table(data$C)
 ```
 
-Guau.
+
+Generacion del modelo
+
+
+```{r}
+train_pred <- generarModelo(train = datos.sinCorrelados, test = datos.sinCorrelados[,-ncol(datos.sinCorrelados)],k=3)
+accuracy<- precision(train_pred,datos.sinCorrelados$C)
+accuracy
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos.sinCorrelados, test = test.sinCorrelados,3)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envio_sin_correlados.csv")
+```
