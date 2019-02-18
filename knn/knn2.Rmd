@@ -67,8 +67,6 @@ resOutliers <- mvoutlier::uni.plot(datos[,c(21:30)])
 datos <- datos[!resOutliers$outliers, ]
 resOutliers <- mvoutlier::uni.plot(datos[,c(31:40)])
 datos <- datos[!resOutliers$outliers, ]
-resOutliers <- mvoutlier::uni.plot(datos[,c(41:50)])
-datos <- datos[!resOutliers$outliers, ]
 ```
 
 ```{r}
@@ -88,3 +86,20 @@ datos.test <- datos[-inTrain,]
 
 ```
 
+
+```{r}
+train_pred <- generarModelo(train = datos, test = datos[,-ncol(datos)],k=3)
+accuracy<- precision(train_pred,datos$C)
+accuracy
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos, test = test,3)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envio_con_outliers.csv")
+```
