@@ -762,6 +762,8 @@ Escalado y centrado
 ```{r}
 datosPrep <- caret::preProcess(datos[,-ncol(datos)],method = c("center","scale"))
 datos[,-ncol(datos)] <- predict(datosPrep,datos[,-ncol(datos)])
+datosPrep <- caret::preProcess(test,method = c("center","scale"))
+test <- predict(datosPrep,test)
 ```
 
 
@@ -769,20 +771,19 @@ Eliminacion de ruido
 
 ```{r,echo=FALSE}
 set.seed (1)
-datos.train$C <- as.factor(datos.train$C)
-out <- IPF(C~., data = datos.train ,s = 3)
+datos$C <- as.factor(datos$C)
+out <- IPF(C~., data = datos ,s = 3)
 summary(out, explicit =TRUE)
 out$cleanData
-datosSinRuido <- datos.train[setdiff(1:nrow(datos.train),out$remIdx),]
-cat("Se han eliminado ", dim(datos.train)[1]- dim(datosSinRuido)[1], "instancias")
-datos.train <- datosSinRuido
+datosSinRuido <- datos[setdiff(1:nrow(datos),out$remIdx),]
+cat("Se han eliminado ", dim(datos)[1]- dim(datosSinRuido)[1], "instancias")
+datos <- datosSinRuido
 ```
 
 ```{r}
-m <- cor(datos.train[,-ncol(datos.train)])
+m <- cor(datos[,-ncol(datos)])
 correlados <- findCorrelation(m, cutoff = 0.8)
-datos.train <- datos.train[,-correlados]
-datos.test <- datos.test[,-correlados]
+datos <- datos[,-correlados]
 test <- test[,-correlados]
 ```
 
@@ -790,58 +791,58 @@ test <- test[,-correlados]
 Desbalanceo 1
 
 ```{r}
-table(datos.train$C)
+table(datos$C)
 ```
 
 ```{r}
-datos.train.smote<- oversample(datos.train,ratio=0.65, method="SMOTE",classAttr = "C")
-table(datos.train.smote$C)
+datos.smote<- oversample(datos,ratio=0.65, method="SMOTE",classAttr = "C")
+table(datos.smote$C)
 ```
 
 Vamos a ver si ha generado ruido.
 
 ```{r,echo=FALSE}
 set.seed (1)
-datos.train.smote$C <- as.factor(datos.train.smote$C)
-out <- IPF(C~., data = datos.train.smote ,s = 3)
+datos.smote$C <- as.factor(datos.smote$C)
+out <- IPF(C~., data = datos.smote ,s = 3)
 summary(out, explicit =TRUE)
 out$cleanData
-datosSinRuido <- datos.train.smote[setdiff(1:nrow(datos.train.smote),out$remIdx),]
-cat("Se han eliminado ", dim(datos.train.smote)[1]- dim(datosSinRuido)[1], "instancias")
-datos.train.smote <- datosSinRuido
+datosSinRuido <- datos.smote[setdiff(1:nrow(datos.smote),out$remIdx),]
+cat("Se han eliminado ", dim(datos.smote)[1]- dim(datosSinRuido)[1], "instancias")
+datos.smote <- datosSinRuido
 ```
 
 ```{r}
-table(datos.train.smote$C)
+table(datos.smote$C)
 ```
 
 Outliers
 
 
 ```{r}
-resOutliers <- mvoutlier::uni.plot(datos.train.smote[,-ncol(datos.train.smote)])
+resOutliers <- mvoutlier::uni.plot(datos.smote[,-ncol(datos.smote)])
 ```
 
 
 ```{r}
-dim(datos.train.smote)
-datos.train.smote.sinoutliers <- datos.train.smote[!resOutliers$outliers, ]
-dim(datos.train.smote.sinoutliers)
+dim(datos.smote)
+datos.smote.sinoutliers <- datos.smote[!resOutliers$outliers, ]
+dim(datos.smote.sinoutliers)
 ```
 
 
 GENERAMOS MODELO
 
 ```{r}
-train_pred <- generarModelo(train = datos.train.smote.sinoutliers, test = datos.test[,-ncol(datos.test)],k=3)
-accuracy<- precision(train_pred,datos.test$C)
+train_pred <- generarModelo(train = datos.smote.sinoutliers, test = datos.smote.sinoutliers[,-ncol(datos.smote.sinoutliers)],k=3)
+accuracy<- precision(train_pred,datos.smote.sinoutliers$C)
 accuracy
 ```
 
 Cálculo de etiquetas del test
 
 ```{r}
-test_pred <- generarModelo(train = datos.train.smote.sinoutliers, test = test,3)
+test_pred <- generarModelo(train = datos.smote.sinoutliers, test = test,3)
 ```
 
 
