@@ -32,8 +32,8 @@ datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
 test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
 ```
 
-
-#IMPUTACION DE DATOS PERDIDOS
+#MODELO 1 --------------------------------------------------------------------------------------------
+#IMPUTACION DE VALORES PERDIDOS
 
 ```{r}
 imputados.amelia <- Amelia::amelia(datos,m=1,parallel="multicore",noms="C")
@@ -120,7 +120,7 @@ generarEnvio(y=test_pred,file="envio_1_fichero2.csv")
 ```
 
 
-
+#MODELO 2 --------------------------------------------------------------------------------------------
 #Ahora con seleccion de caracteristicas: da menos accuracy, por lo que me quedo con todas las variables
 
 
@@ -161,3 +161,49 @@ test_pred <- generarModelo(train = datos, test = test,1)
 generarEnvio(y=test_pred,file="envio2.2_fichero2.csv")
 ```
 
+#MODELO 3 --------------------------------------------------------------------------------------------
+#Tratar desbalanceo
+
+Datos: imputacion, normalizacion,outliers,ruido
+
+```{r}
+dim(datos)
+```
+
+```{r}
+table(datos$C)
+```
+
+```{r}
+datos.smote<- oversample(datos,ratio=0.65, method="SMOTE",classAttr = "C")
+table(datos.smote$C)
+```
+
+
+
+
+```{r}
+inTrain <- caret::createDataPartition(y = datos.smote$C, p = .75, list = FALSE)
+
+datos.train <- datos.smote[inTrain,]
+datos.test <- datos.smote[-inTrain,]
+```
+
+GENERAR MODELO 3: Oversampling con smote
+
+```{r}
+train_pred <- generarModelo(train = datos.train, test = datos.test[,-ncol(datos.test)],k=3)
+accuracy<- precision(train_pred,datos.test$C)
+accuracy
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos, test = test,3)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envio3_fichero2.csv")
+```
