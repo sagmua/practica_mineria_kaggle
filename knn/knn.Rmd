@@ -141,7 +141,6 @@ Al método siguiente solo se le puede pasar un argumento de menos de 10 dimension
 resOutliers <- mvoutlier::uni.plot(datos[1:10])
 ```
 
-
 ```{r}
 datos <- datos[!resOutliers$outliers, ]
 ```

@@ -1,0 +1,90 @@
+---
+title: "Knn 2"
+author: "Carmen Biedma Rodriguez"
+date: "18 de febrero de 2019"
+output: pdf_document
+---
+
+```{r}
+library(dplyr)
+library(Hmisc)
+library(caret)
+library(mice)
+library(VIM)
+library(class)
+library(outliers)
+library(ggplot2)
+library(mvoutlier)
+library(FSelector)
+library(corrplot)
+library(NoiseFiltersR)
+
+source("../funcionesAux.R")
+
+generarModelo <- function(train,test,k=3){
+  pred  <- knn(train = train[,-ncol(train)], test = test,cl = train$C, k)
+  pred
+}
+```
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+```
+
+
+#IMPUTACION DE DATOS PERDIDOS
+
+```{r}
+imputados.amelia <- Amelia::amelia(datos,m=1,parallel="multicore",noms="C")
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+datos <- imputados.amelia$imputations$imp1
+```
+
+#ESCALADO Y CENTRADO DE LOS DATOS
+
+```{r}
+datosPrep <- caret::preProcess(datos[,-ncol(datos)],method = c("center","scale"))
+datos[,-ncol(datos)] <- predict(datosPrep,datos[,-ncol(datos)])
+datosPrep <- caret::preProcess(test,method = c("center","scale"))
+test <- predict(datosPrep,test)
+```
+
+
+```{r}
+boxplot(datos)
+```
+
+
+```{r}
+resOutliers <- mvoutlier::uni.plot(datos[,c(1:10)])
+datos <- datos[!resOutliers$outliers, ]
+resOutliers <- mvoutlier::uni.plot(datos[,c(11:20)])
+datos <- datos[!resOutliers$outliers, ]
+resOutliers <- mvoutlier::uni.plot(datos[,c(21:30)])
+datos <- datos[!resOutliers$outliers, ]
+resOutliers <- mvoutlier::uni.plot(datos[,c(31:40)])
+datos <- datos[!resOutliers$outliers, ]
+resOutliers <- mvoutlier::uni.plot(datos[,c(41:50)])
+datos <- datos[!resOutliers$outliers, ]
+```
+
+```{r}
+boxplot(datos)
+```
+
+```{r}
+table(datos$C)
+```
+
+
+```{r}
+inTrain <- caret::createDataPartition(y = datos$C, p = .75, list = FALSE)
+
+datos.train <- datos[ inTrain,]
+datos.test <- datos[-inTrain,]
+
+```
+
