@@ -207,3 +207,97 @@ test_pred <- generarModelo(train = datos, test = test,3)
 ```{r}
 generarEnvio(y=test_pred,file="envio3_fichero2.csv")
 ```
+
+#MODELO 4 --------------------------------------------------------------------------------------------
+
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+```
+
+
+```{r}
+imputados.amelia <- Amelia::amelia(datos,m=1,parallel="multicore",noms="C")
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+datos <- imputados.amelia$imputations$imp1
+```
+
+
+#ESCALADO Y CENTRADO DE LOS DATOS
+
+```{r}
+datosPrep <- caret::preProcess(datos[,-ncol(datos)],method = c("center","scale"))
+datos[,-ncol(datos)] <- predict(datosPrep,datos[,-ncol(datos)])
+datosPrep <- caret::preProcess(test,method = c("center","scale"))
+test <- predict(datosPrep,test)
+```
+
+
+
+```{r,echo=FALSE}
+datos$C <- as.factor(datos$C)
+out <- IPF(C~., data = datos,s = 3)
+summary(out, explicit =TRUE)
+out$cleanData
+datosSinRuido <- datos[setdiff(1:nrow(datos),out$remIdx),]
+cat("Se han eliminado ", dim(datos)[1]- dim(datosSinRuido)[1], "instancias")
+datos <- datosSinRuido
+```
+
+```{r}
+table(datos$C)
+balanced <- ubUnder(X=datos[,-ncol(datos)], Y= datos$C, perc = 40, method = "percPos")
+datos.undersampling <- balanced$X
+datos.undersampling$C <- balanced$Y
+table(datos.undersampling$C)
+```
+
+
+```{r}
+inTrain <- caret::createDataPartition(y = datos.undersampling$C, p = .75, list = FALSE)
+
+datos.train <- datos.undersampling[inTrain,]
+datos.test <- datos.undersampling[-inTrain,]
+```
+
+GENERAR MODELO 4: undersampling
+
+```{r}
+train_pred <- generarModelo(train = datos.train, test = datos.test[,-ncol(datos.test)],k=3)
+accuracy<- precision(train_pred,datos.test$C)
+accuracy
+```
+
+
+GENERAR MODELO 5: undersampling con eliminacion de outliers
+
+```{r}
+resOutliers <- mvoutlier::uni.plot(datos.undersampling[,c(1:10)])
+datos.sinoutliers <- datos.undersampling[!resOutliers$outliers, ]
+resOutliers <- mvoutlier::uni.plot(datos.undersampling[,c(11:20)])
+datos.sinoutliers  <- datos.undersampling[!resOutliers$outliers, ]
+resOutliers <- mvoutlier::uni.plot(datos.undersampling[,c(21:30)])
+datos.sinoutliers  <- datos.undersampling[!resOutliers$outliers, ]
+resOutliers <- mvoutlier::uni.plot(datos.undersampling[,c(31:40)])
+datos.sinoutliers  <- datos.undersampling[!resOutliers$outliers, ]
+```
+
+
+
+GENERAR MODELO 4: undersampling
+
+```{r}
+inTrain <- caret::createDataPartition(y = datos.sinoutliers$C, p = .75, list = FALSE)
+
+datos.train <- datos.sinoutliers[inTrain,]
+datos.test <- datos.sinoutliers[-inTrain,]
+```
+
+```{r}
+train_pred <- generarModelo(train = datos.train, test = datos.test[,-ncol(datos.test)],k=3)
+accuracy<- precision(train_pred,datos.test$C)
+accuracy
+```
