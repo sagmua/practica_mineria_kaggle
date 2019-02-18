@@ -511,7 +511,7 @@ cor(datos[,-ncol(datos)])
 
 Eliminaremos X26,X21,X15,X37,X24,X17,X32,X30,X7,X20,X47,X13
 
-,
+
 ```{r}
 datos.sinCorrelados <- datos[,c("X16","X23","X27","X42","X3","X18","X12","X34","C")]
 test.sinCorrelados <- test[,c("X16","X23","X27","X42","X3","X18","X12","X34")]
@@ -593,11 +593,10 @@ datos <- datosSinRuido
 corrplot(cor(datos[,-ncol(datos)]))
 ```
 
-Voy a dejar solo las variables X3,X12,,X16,X23,X27,X34,X41,X42
 
 ```{r}
-datos <- datos[,c("X3","X12","X16","X23","X27","X34","X41","X42","C")]
-test <- test[,c("X3","X12","X16","X23","X27","X34","X41","X42")]
+datos <- datos[,c("X16","X23","X27","X42","X3","X18","X12","X34","C")]
+test <- test[,c("X16","X23","X27","X42","X3","X18","X12","X34")]
 ```
 
 Proporcion de datos de cada clase:
@@ -643,7 +642,7 @@ test_pred <- generarModelo(train = datos.balanceados, test = test,3)
 
 
 ```{r}
-generarEnvio(y=test_pred,file="envio_tomek_links.csv")
+generarEnvio(y=test_pred,file="envio_tomek_links2.csv")
 ```
 
 
@@ -684,4 +683,164 @@ generarEnvio(y=test_pred,file="envio_undersampling.csv")
 
 OVERSAMPLING
 
+```{r}
+balanced <- ubSMOTE(X=datos[,-ncol(datos)], Y= datos$C)
+```
 
+```{r}
+datos.oversampling <- balanced$X
+datos.oversampling$C <- balanced$Y
+table(datos.oversampling$C)
+```
+
+
+
+Generacion del modelo
+
+SOBREAJUSTA MIL
+
+
+```{r}
+train_pred <- generarModelo(train = datos.oversampling, test = datos.oversampling[,-ncol(datos.oversampling)],k=3)
+accuracy<- precision(train_pred,datos.oversampling$C)
+accuracy
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos.oversampling, test = test,3)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envio_oversampling.csv")
+```
+
+
+
+UNDERSAMPLIG CNN + TOMEK LINKS
+
+
+```{r}
+data.cnn <- ubCNN(X = datos[,-ncol(datos)],Y = datos[,ncol(datos)])
+data.cnn <- ubTomek(X=data.cnn$X,Y=data.cnn$Y)
+```
+
+RESULTADOS DE MÉTODOS PARA DESBALANCEO
+```{r}
+resultados <- data.frame(modelo = c("tomek_links","undersampling","oversampling"),
+                         accuracy.train = c(0.957432,0.9253442,0.9786026),
+                         accuracy.test = c(0.86676,0.85604,0.83767))
+resultados
+```
+
+
+##MODELO CON SELECCION DE CARACTERISTICAS + PARTICION DE DATOS + SMOTE + OUTLIERS
+
+primero imputacion, despues escalado, particion, ruido
+
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+```
+
+
+Imputación de valores perdidos.
+
+```{r}
+imputados.amelia <- Amelia::amelia(datos,m=1,parallel="multicore",noms="C")
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+datos <- imputados.amelia$imputations$imp1
+```
+
+Escalado y centrado
+
+```{r}
+datosPrep <- caret::preProcess(datos.train[,-ncol(datos.train)],method = c("center","scale"))
+datos[,-ncol(datos.train)] <- predict(datosPrep,datos[,-ncol(datos)])
+datosPrep <- caret::preProcess(test,method = c("center","scale"))
+test <- predict(datosPrep,test)
+```
+
+Particionado
+
+```{r}
+inTrain <- caret::createDataPartition(y = datos$C, p = .75, list = FALSE)
+datos.train <- datos[inTrain,]
+datos.test <- datos[-inTrain,]
+```
+
+
+Eliminacion de ruido
+
+```{r,echo=FALSE}
+set.seed (1)
+datos.train$C <- as.factor(datos.train$C)
+out <- IPF(C~., data = datos.train ,s = 3)
+summary(out, explicit =TRUE)
+out$cleanData
+datosSinRuido <- datos.train[setdiff(1:nrow(datos.train),out$remIdx),]
+cat("Se han eliminado ", dim(datos.train)[1]- dim(datosSinRuido)[1], "instancias")
+datos.train <- datosSinRuido
+datos.train$C <- as.numeric(datos.train$C)
+```
+
+```{r}
+m <- cor(datos.train)
+correlados <- findCorrelation(m, cutoff = 0.8)
+datos.train <- datos.train[,-correlados]
+```
+
+
+Desbalanceo 1
+
+```{r}
+table(datos.train$C)
+```
+
+```{r}
+datos.train.smote<- oversample(datos.train,ratio=0.65, method="SMOTE",classAttr = "C")
+table(datos.train.smote$C)
+```
+
+Vamos a ver si ha generado ruido.
+
+```{r,echo=FALSE}
+set.seed (1)
+datos.train.smote$C <- as.factor(datos.train.smote$C)
+out <- IPF(C~., data = datos.train.smote ,s = 3)
+summary(out, explicit =TRUE)
+out$cleanData
+datosSinRuido <- datos.train.smote[setdiff(1:nrow(datos.train.smote),out$remIdx),]
+cat("Se han eliminado ", dim(datos.train.smote)[1]- dim(datosSinRuido)[1], "instancias")
+datos.train.smote <- datosSinRuido
+datos.train.smote$C <- as.numeric(datos.train.smote$C)
+```
+
+```{r}
+table(datos.train.smote$C)
+```
+
+Outliers
+
+
+
+```{r}
+anomalos <- outliers::outlier(datos[,-ncol(datos)])
+print(anomalos)
+```
+
+Al método siguiente solo se le puede pasar un argumento de menos de 10 dimensiones, por lo que si queremos ver todos los outliers que hay en todas las variables, tenemos que ponerals por separado. Además, solo considera los outliers de una dimensión, es decir, que no detecta outliers qeu estén provocados por una combiación anómala de valores de un conjhunto de variables.
+
+```{r}
+resOutliers <- mvoutlier::uni.plot(datos[1:10])
+```
+
+
+```{r}
+datos <- datos[!resOutliers$outliers, ]
+```
