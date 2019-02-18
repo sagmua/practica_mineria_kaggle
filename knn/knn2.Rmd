@@ -77,29 +77,87 @@ boxplot(datos)
 table(datos$C)
 ```
 
+Ruido
+
+```{r,echo=FALSE}
+datos$C <- as.factor(datos$C)
+out <- IPF(C~., data = datos,s = 3)
+summary(out, explicit =TRUE)
+out$cleanData
+datosSinRuido <- datos[setdiff(1:nrow(datos),out$remIdx),]
+cat("Se han eliminado ", dim(datos)[1]- dim(datosSinRuido)[1], "instancias")
+datos <- datosSinRuido
+```
+
+
+
+Particionado
 
 ```{r}
 inTrain <- caret::createDataPartition(y = datos$C, p = .75, list = FALSE)
 
 datos.train <- datos[ inTrain,]
 datos.test <- datos[-inTrain,]
-
 ```
 
+GENERAR MODELO 1
 
 ```{r}
-train_pred <- generarModelo(train = datos, test = datos[,-ncol(datos)],k=3)
-accuracy<- precision(train_pred,datos$C)
+train_pred <- generarModelo(train = datos.train, test = datos.test[,-ncol(datos.test)],k=3)
+accuracy<- precision(train_pred,datos.test$C)
 accuracy
 ```
 
 Cálculo de etiquetas del test
 
 ```{r}
-test_pred <- generarModelo(train = datos, test = test,3)
+test_pred <- generarModelo(train = datos.train, test = test,3)
 ```
 
 
 ```{r}
-generarEnvio(y=test_pred,file="envio_con_outliers.csv")
+generarEnvio(y=test_pred,file="envio_1_fichero2.csv")
 ```
+
+
+
+#Ahora con seleccion de caracteristicas: da menos accuracy, por lo que me quedo con todas las variables
+
+
+```{r}
+m <- cor(datos[,-ncol(datos)])
+correlados <- findCorrelation(m, cutoff = 0.8)
+datos <- datos[,-correlados]
+test <- test[,-correlados]
+```
+
+
+```{r}
+inTrain <- caret::createDataPartition(y = datos$C, p = .75, list = FALSE)
+
+datos.train <- datos[ inTrain,]
+datos.test <- datos[-inTrain,]
+```
+
+GENERAR MODELO 2: 
+MODELO 2.1:se ha probado con todos los datos de train para predecir en vez de solo la particion de train hecha
+MODELO 2.3: se ha probado un 1nn -> da peor resultado todavia.
+
+
+```{r}
+train_pred <- generarModelo(train = datos.train, test = datos.test[,-ncol(datos.test)],k=1)
+accuracy<- precision(train_pred,datos.test$C)
+accuracy
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos, test = test,1)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envio2.2_fichero2.csv")
+```
+
