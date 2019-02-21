@@ -1,0 +1,207 @@
+---
+title: "Visualizacion"
+author: "Carmen Biedma Rodriguez"
+date: "19 de febrero de 2019"
+output: pdf_document
+---
+
+
+```{r}
+library(dplyr)
+library(Hmisc)
+library(caret)
+library(mice)
+library(VIM)
+library(class)
+library(outliers)
+library(ggplot2)
+library(mvoutlier)
+library(FSelector)
+library(corrplot)
+library(NoiseFiltersR)
+library(ggplot2)
+library(robCompositions)
+
+source("../funcionesAux.R")
+
+generarModelo <- function(train,test,k=3){
+  pred  <- knn(train = train[,-ncol(train)], test = test,cl = train$C, k)
+  pred
+}
+```
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+```
+
+```{r}
+dim(datos)
+sin.redundantes <- unique(datos)
+dim(sin.redundantes)
+datos <- sin.redundantes
+```
+
+Imputacion con KNN
+
+
+```{r}
+completos <- mice::ncc(datos)
+incompletos <- mice::nic(datos)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+
+# se hace la imputacion
+imputados <- robCompositions::impKNNa(datos, primitive=TRUE)
+datos <- imputados$xImp
+completos <- mice::ncc(datos)
+incompletos <- mice::nic(datos)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+datos <- as.data.frame(datos)
+```
+
+
+```{r}
+datosPrep <- caret::preProcess(datos[,-ncol(datos)],method = c("center","scale"))
+datos[,-ncol(datos)] <- predict(datosPrep,datos[,-ncol(datos)])
+datosPrep <- caret::preProcess(test,method = c("center","scale"))
+test <- predict(datosPrep,test)
+```
+
+```{r,echo=FALSE}
+datos$C <- as.factor(datos$C)
+out <- IPF(C~., data = datos,s = 3)
+summary(out, explicit =TRUE)
+out$cleanData
+datosSinRuido <- datos[setdiff(1:nrow(datos),out$remIdx),]
+cat("Se han eliminado ", dim(datos)[1]- dim(datosSinRuido)[1], "instancias")
+datos <- datosSinRuido
+```
+
+#MODELO CON IMPUTACION POR KNN
+
+Particionado
+
+```{r}
+inTrain <- caret::createDataPartition(y = datos$C, p = .75, list = FALSE)
+
+datos.train <- datos[ inTrain,]
+datos.test <- datos[-inTrain,]
+```
+
+GENERAR MODELO 1
+
+```{r}
+train_pred <- generarModelo(train = datos.train, test = datos.test[,-ncol(datos.test)],k=3)
+accuracy<- precision(train_pred,datos.test$C)
+accuracy
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos, test = test,3)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envioA.csv")
+```
+
+
+-> Sin redundantes, con impitacion knn y escalado: 0.7376042. 
+-> Sin redundantes, con imputacion knn, escalado, eliminacion outliers: 0.7030686
+A -> Sin redundantes , con imputacion knn, escalado y eliminacion de ruido: 0.8983502, kaggle = 0.87442
+B -> Sin redundantes, con imputacion knn, escalado, eliminacion de ruido y k = 1, kaggle = 0.85145
+
+
+#MODELO CON IMPUTACION POR KNN con k= 1
+
+Particionado
+
+```{r}
+inTrain <- caret::createDataPartition(y = datos$C, p = .75, list = FALSE)
+
+datos.train <- datos[ inTrain,]
+datos.test <- datos[-inTrain,]
+```
+
+GENERAR MODELO 1
+
+```{r}
+train_pred <- generarModelo(train = datos.train, test = datos.test[,-ncol(datos.test)],k=1)
+accuracy<- precision(train_pred,datos.test$C)
+accuracy
+```
+
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos.train, test = test,1)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envioB.csv")
+```
+
+
+#MEJOR MODELO DE ANTES (A) CON PCA
+
+```{r}
+datos.pca <- prcomp(datos[,-ncol(datos)],scale. = FALSE, center = FALSE)
+```
+
+```{r}
+pairs(datos[,c(1:10)],col=as.numeric(datos$C)+1)
+pairs(datos[,c(11:20)],col=as.numeric(datos$C)+1)
+pairs(datos[,c(21:30)],col=as.numeric(datos$C)+1)
+pairs(datos[,c(31:40)],col=as.numeric(datos$C)+1)
+pairs(datos[,c(41:50)],col=as.numeric(datos$C)+1)
+```
+
+
+```{r}
+plot(datos$X12~datos$X16,col=datos$C)
+plot(datos$X3~datos$X16,col=datos$C)
+plot(datos$X18~datos$X16,col=datos$C)
+plot(datos$X23~datos$X27,col=datos$C)
+plot(datos$X42~datos$X41,col=datos$C)
+```
+
+
+```{r}
+datos.seleccion <- datos[,c("X3","X12","X16","X18","X23","X27","X41","X42","C")]
+pairs(datos.seleccion,col=datos.seleccion$C)
+```
+
+
+Particionado
+
+```{r}
+inTrain <- caret::createDataPartition(y = datos.seleccion$C, p = .75, list = FALSE)
+
+datos.train <- datos[ inTrain,]
+datos.test <- datos[-inTrain,]
+```
+
+GENERAR MODELO 1
+
+```{r}
+train_pred <- generarModelo(train = datos.train, test = datos.test[,-ncol(datos.test)],k=3)
+accuracy<- precision(train_pred,datos.test$C)
+accuracy
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos, test = test,3)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envioA.1.csv")
+```
+
+A.1 -> Sin redundantes , con imputacion knn, escalado y eliminacion de ruido, seleccion de caract: 0.8956337
