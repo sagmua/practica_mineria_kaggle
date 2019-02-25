@@ -15,7 +15,6 @@ knitr::opts_chunk$set(echo = TRUE)
 #Librerías a usar y funciones útiles:
 library(dplyr)
 library(Hmisc)
-library(arules)
 library(mice)
 library(Amelia)
 library(PerformanceAnalytics)
@@ -26,6 +25,9 @@ library(RWeka)
 library ( NoiseFiltersR )
 library(FSelector)
 library(RKEEL)
+library(unbalanced)
+library(DMwR)
+
 
 
 ##FUNCIONES AUXILIARES:
@@ -141,6 +143,7 @@ Para ello realizamos una representación gráfica de las correlaciones entre las
 
 
 ```{r}
+datos_sin_seleccion = datos
 # se encuentran aquellas variables que presentan valores de correlacion
 # por encima del valor umbral
 highlyCorrelated = caret :: findCorrelation(cor(datos) , cutoff =0.99)
@@ -179,6 +182,7 @@ escalado:
 #datos = datos[,!names(datos) %in% c("X25", "X44")]
 #datos [,-which(names(datos) == "C")] = scale(datos[,- which(names(datos) == "C")], center = TRUE, scale = TRUE)
 datos$C = as.factor(datos$C)
+datos_sin_seleccion$C = as.factor(datos_sin_seleccion$C)
 ```
 
 Eliminación de ruido:
@@ -188,6 +192,10 @@ out = IPF(C~., data = datos , nfolds=5, s = 3)
 summary(out, explicit =TRUE)
 identical(out$cleanData , datos[ setdiff (1:nrow(datos) ,out$remIdx) ,])
 datos = out$cleanData
+
+datos_sin_seleccion_out = IPF(C~., data = datos_sin_seleccion , nfolds=5, s = 3)
+datos_sin_seleccion = datos_sin_seleccion_out$cleanData
+
 ```
 
 ## Datos anómalos:
@@ -195,8 +203,9 @@ datos = out$cleanData
 anomalos <- outliers::outlier(datos[,-ncol(datos)])
 print(anomalos)
 
+
 resOutliers1 <- mvoutlier::uni.plot(datos[1:10])
-#resOutliers2 <- mvoutlier::uni.plot(datos[11:20])
+#resOutliers2 <- mvoutlier::uni.plot(datos[11:ncol(datos)])
 #resOutliers3 <- mvoutlier::uni.plot(datos[21:30])
 #resOutliers4 <- mvoutlier::uni.plot(datos[31:40])
 #resOutliers2 <- mvoutlier::uni.plot(datos[c(41:44,46:50)])
@@ -204,8 +213,41 @@ resOutliers1 <- mvoutlier::uni.plot(datos[1:10])
 
 
 
+```
+
+## Desbalanceo
+Como hemos visto durante este análisis previo tenemos un conjunto de datos desbalanceado, donde tenemos más instancias de clase '0' que de clase '1'.
+
+Para paliar este problema procedemos a utilizar el algoritmo SMOTE:
+
+```{r}
+#datos_b = SMOTE(C~., data = datos_sin_seleccion, perc.over = 200, k=5, perc.under = 150)
 
 ```
+
+Probemos ahora con rmek:
+
+```{r}
+
+set.seed(3)
+salidaTomek = ubTomek(datos_sin_seleccion[,-ncol(datos_sin_seleccion)], datos_sin_seleccion$C)
+
+datosTomek = cbind(salidaTomek$X, C = salidaTomek$Y)
+
+dim(datosTomek)
+
+proporcion = group_by(datosTomek,C) %>% summarise(propo = round((nc = (n() * 100)/dim(datosTomek)[1]),digits = 1))
+
+proporcion
+
+df <- data.frame(clase=proporcion$C,
+                proporcion=proporcion$propo)
+
+p<-ggplot(df, aes(x=clase, y=proporcion, fill=clase)) +
+  geom_bar(stat="identity")+theme_minimal()
+p
+```
+
 
 
 ## Modelos RIPPER
@@ -216,18 +258,20 @@ Llegados a este punto, donde el preprocesamiento está realizado, sólo nos qued
 #test = as.data.frame(scale(test, center = TRUE, scale = TRUE))
 #discretizar:
 #datos = discretization::disc.Topdown(datos, method=1)
-modelRipp <- JRip(f,data = datos)
-prediction = predict(modelRipp, datos)
+
+modelRipp <- JRip(formula = C~.,data = datos_duplicados)
+#prediction = predict(modelRipp, datos)
 ```
 
 Calculamos la precisión para el conjunto train:
 ```{r}
-precision(predictionLabels = prediction, testLabels = datos$C)
+#precision(predictionLabels = prediction, testLabels = datos$C)
+evaluate_Weka_classifier(modelRipp, numFolds = 5, seed = 3)
 ```
 Generamos un primer envío, sin discretizar ni normalizar, ni outliers:
 ```{r}
 prediction = predict(modelRipp, test)
-generarEnvio(prediction, file = "eliminadas muy correladas.csv")
+generarEnvio(prediction, file = "datos_tomek_duplicados.csv")
 
 ```
 
