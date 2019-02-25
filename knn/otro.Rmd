@@ -1,0 +1,176 @@
+---
+title: "Untitled"
+author: "Carmen Biedma Rodriguez"
+date: "25 de febrero de 2019"
+output: pdf_document
+---
+#Modelo 8: desbalanceo
+
+
+```{r}
+library(dplyr)
+library(Hmisc)
+library(caret)
+library(mice)
+library(VIM)
+library(class)
+library(outliers)
+library(ggplot2)
+library(mvoutlier)
+library(FSelector)
+library(corrplot)
+library(NoiseFiltersR)
+library(lattice)
+library(unbalanced)
+
+source("../funcionesAux.R")
+
+generarModelo <- function(train){
+  control = trainControl(method="cv", number=5)
+  model = caret::train(train[,-ncol(train)], train$C, method="knn",
+                  metric="Accuracy", trControl=control,
+                  tuneGrid = data.frame(.k = seq(1,21,2)))
+  model
+}
+```
+
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+
+```
+
+
+```{r}
+d <- duplicated(datos)
+length(which(d == TRUE))
+datos <- datos[!d,]
+```
+
+
+```{r}
+datosOutliersNA <- apply(datos[,1:(ncol(datos)-1)],2,function(c){
+    cuartil.primero <- quantile(c,probs=0.25,na.rm = TRUE)
+    cuartil.tercero <- quantile(c,probs=0.75,na.rm = TRUE)
+    iqr <- cuartil.tercero - cuartil.primero
+    extremo.inferior.outlier.normal <- cuartil.primero - 1.5*iqr
+    extremo.superior.outlier.normal  <- cuartil.tercero + 1.5*iqr
+    
+    c[c<=extremo.inferior.outlier.normal] <- NA
+    c[c>=extremo.superior.outlier.normal] <- NA
+    c
+})
+
+datosOutliersNA <- as.data.frame(datosOutliersNA)
+datosOutliersNA$C <- datos$C
+```
+
+
+```{r}
+mice::md.pattern(datosOutliersNA,plot=TRUE)
+```
+
+
+```{r}
+completos <- mice::ncc(datosOutliersNA)
+incompletos <- mice::nic(datosOutliersNA)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+imputados <- mice::mice(datosOutliersNA, m=5, meth="pmm")
+datosImputados <- mice::complete(imputados)
+completos <- mice::ncc(datosImputados)
+incompletos <- mice::nic(datosImputados)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+datosOutliersNA.imputadosPMM <- datosImputados
+```
+
+```{r}
+datosOutliersNA.imputadosPMM$C <- as.factor(datosOutliersNA.imputadosPMM$C)
+out <- IPF(C~., data = datosOutliersNA.imputadosPMM ,s = 3)
+summary(out, explicit =TRUE)
+out$cleanData
+datosOutliersNA.imputadosPMM.IPF <- datosOutliersNA.imputadosPMM[setdiff(1:nrow(datosOutliersNA.imputadosPMM),out$remIdx),]
+```
+
+```{r}
+table(datosOutliersNA.imputadosPMM.IPF$C)
+balanced <- ubTomek(datosOutliersNA.imputadosPMM.IPF[,-ncol(datosOutliersNA.imputadosPMM.IPF)],datosOutliersNA.imputadosPMM.IPF$C)
+
+datosOutliersNA.imputadosPMM.IPF.Tomek1 <- balanced$X
+datosOutliersNA.imputadosPMM.IPF.Tomek1$C <- balanced$Y
+table(datosOutliersNA.imputadosPMM.IPF.Tomek1$C)
+
+balanced <- ubTomek(datosOutliersNA.imputadosPMM.IPF.Tomek1[,-ncol(datosOutliersNA.imputadosPMM.IPF.Tomek1)],datosOutliersNA.imputadosPMM.IPF.Tomek1$C)
+
+datosOutliersNA.imputadosPMM.IPF.Tomek2 <- balanced$X
+datosOutliersNA.imputadosPMM.IPF.Tomek2$C <- balanced$Y
+table(datosOutliersNA.imputadosPMM.IPF.Tomek2$C)
+```
+
+```{r}
+datosPrep <- caret::preProcess(datosOutliersNA.imputadosPMM.IPF.Tomek2[,-ncol(datosOutliersNA.imputadosPMM.IPF.Tomek2)],method = c("center","scale"))
+datosOutliersNA.imputadosPMM.IPF.Tomek2[,-ncol(datosOutliersNA.imputadosPMM.IPF.Tomek2)] <- predict(datosPrep,datosOutliersNA.imputadosPMM.IPF.Tomek2[,-ncol(datosOutliersNA.imputadosPMM.IPF.Tomek2)])
+datosPrep <- caret::preProcess(test,method = c("center","scale"))
+test.prep <- predict(datosPrep,test)
+```
+
+```{r}
+datosOutliersNA.imputadosPMM.IPF.Tomek2$C <- as.factor(datosOutliersNA.imputadosPMM.IPF.Tomek2$C)
+model <- generarModelo(datosOutliersNA.imputadosPMM.IPF.Tomek2)
+model
+```
+
+
+```{r}
+test_pred <- predict(model,test)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioDefinitivo8.csv")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+m <- cor(datosOutliersNA.imputadosPMM.IPF.Tomek2[,-ncol(datosOutliersNA.imputadosPMM.IPF.Tomek2)])
+correlados <- findCorrelation(m, cutoff = 0.8)
+correlados
+datosOutliersNA.imputadosPMM.IPF.Tomek2.cor <- datosOutliersNA.imputadosPMM.IPF.Tomek2[,-correlados]
+test.cor <- test[,-correlados]
+```
+
+```{r}
+datosOutliersNA.imputadosPMM.IPF.Tomek2.cor$C <- as.factor(datosOutliersNA.imputadosPMM.IPF.Tomek2.cor$C)
+model <- generarModelo(datosOutliersNA.imputadosPMM.IPF.Tomek2.cor)
+model
+```
+
+
+```{r}
+test_pred <- predict(model,test)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioDefinitivo9.csv")
+```
