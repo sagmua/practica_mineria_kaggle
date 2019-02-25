@@ -27,7 +27,11 @@ require(robCompositions)
 library(NoiseFiltersR)
 library(outliers)
 require(mvoutlier)
-
+library(mlbench)
+library(corrplot)
+library(FSelector)
+library(unbalanced)
+library(ROSE)
 #Funciones auxiliares:
 setwd("~/GitHub/practica_mineria_kaggle")
 source("funcionesAux.R")
@@ -233,6 +237,8 @@ datos = as.data.frame(datosImputadosAmelia)
 
 datos$C = as.factor(datos$C)
 # se aplica el algoritmo 
+# El s = 2 establece el criterio de parada el cual indica que el algoritmo para
+# después de encontrarse sin eliminar instancias tras dos iteraciones
 out <- IPF(C~., data = datos, s = 2)
 
 # se muestran los indices de las instancias con ruido
@@ -253,27 +259,420 @@ str(datosSinRuido)
 
 Como podemos observar, se han detectado 1572 instancias con ruido y por tanto las hemos eliminado, aproximadamente un 17% del conjunto de datos era ruido. Atendiendo a esto, podemos afirmar que el ruido ha sido introducido de forma intencionada en el dataset siguiendo alguno de los métodos de introducción de ruido existentes.
 
+Una vez comprobado el ruido, vamos a volver a comprobar la distribución de clases del conjunto ya que seguramente debido a aplicar esta técnica el conjunto se haya desbalanceado más aún.
 
+```{r proporcionClaseDespuesIPF}
+
+proporcion = group_by(datosSinRuido,C) %>% summarise(propo = round((nc = (n() * 100)/dim(datosSinRuido)[1]),digits = 1))
+proporcion
+
+df <- data.frame(clase=proporcion$C,
+                proporcion=proporcion$propo)
+
+p<-ggplot(df, aes(x=clase, y=proporcion, fill=clase)) +
+  geom_bar(stat="identity")+theme_minimal()
+p
+
+```
+Como hemos podido adelantar, al aplicar IPF hemos provocado un desbalanceo aún más grande, por tanto ahora tenemos un 73.1% de la clase 0 y un 26.9 de la clase 1, con respecto a los valores iniciales de 65.5% y 34.5% respectivamente. Debido a este desbalanceo podemos plantearnos utilizar técnicas de oversampling y undersampling para intentar balancear más el conjunto de datos y por tanto obtener mejores resultados.
+
+
+
+---- RUIDO SIN IPF --- 
+
+```{r ruido}
+
+# se inicializa la semilla aleatoria para reproducir los resultados
+set.seed(1)
+
+datos = as.data.frame(datosImputadosAmelia)
+
+datos$C = as.factor(datos$C)
+# se aplica el algoritmo 
+out = EF(C~., data = datos, consensus = FALSE)
+
+# se muestran los indices de las instancias con ruido
+#summary(out, explicit = TRUE)
+
+# el conjunto de datos sin ruido se obtiene de la siguiente forma
+out$cleanData
+
+# tambien podriamos obtenerlo de forma directa eliminando los
+# indices de las instancias consideradas como ruidosas
+datosSinRuidoEF <- datos[setdiff(1:nrow(datos),out$remIdx),]
+
+datosSinRuidoEF = as.data.frame(datosSinRuidoEF)
+str(datosSinRuidoEF)
+
+
+```
+
+```{r ruido}
+
+# se inicializa la semilla aleatoria para reproducir los resultados
+set.seed(1)
+
+datos = as.data.frame(datosImputadosAmelia)
+
+datos$C = as.factor(datos$C)
+# se aplica el algoritmo 
+out = CVCF(C~., data = datos, consensus = FALSE)
+
+# se muestran los indices de las instancias con ruido
+#summary(out, explicit = TRUE)
+
+# el conjunto de datos sin ruido se obtiene de la siguiente forma
+out$cleanData
+
+# tambien podriamos obtenerlo de forma directa eliminando los
+# indices de las instancias consideradas como ruidosas
+datosSinRuidoCVCF <- datos[setdiff(1:nrow(datos),out$remIdx),]
+
+datosSinRuidoCVCF = as.data.frame(datosSinRuidoCVCF)
+str(datosSinRuidoCVCF)
+
+
+```
 ### Anomalías
 
 Después de comparar los resultados en kaggle, hemos conseguido mejorar la precisión de nuestro clasificador al suavizar el ruido del dataset de entrenamiento. Sin embargo, en los conjuntos de datos pueden existir otro tipo de valores erróneos que no se pueden considerar ruido. Estos valores se corresponden con los de aquellas instancias cuyas características son muy diferentes con respecto a la mayoría de los demás datos, por tanto se denominan outliers o valores extremos. En ocasiones, su presencia es producida por errores en la recogida de los datos 
 
-En general, los algoritmos de árboles de clasificación no son muy sensibles a outliers, ya que al poder tratar con variables continuas establecen particiones en los dominios teniendo en cuenta valores límite (outliers). Por tanto, no vamos a realizar este proceso ya que seguramente no obtengamos ninguna mejora en nuestro clasificador.
+En general, los algoritmos de árboles de clasificación no son muy sensibles a outliers, ya que al poder tratar con variables continuas establecen particiones en los dominios teniendo en cuenta valores límite (outliers). Sin embargo, analizaremos la presencia de outliers en el conjunto de datos.
+
+```{r anomaliasboxplot}
+
+boxplot(datosSinRuido[,-51])
+
+
+```
+
+Como podemos observar, tenemos el mismo valor outlier en cada variable. Esto seguramente se deba a que ha sido introducido de forma intencionada en cada variable. Lo que más se puede ver a simple vista es que las variables X3 y X16 tienen muchos outliers.
+
+
+### Transformación de los datos
+
+Este proceso está fundamentalmente orientado para aquellos algoritmos que utilizan medidas de distancia para generar el método de aprendizaje. Sin embargo, en árboles de clasificación no es necesario realizar esta etapa del preprocesamiento ya que en ningún momento se utilizan métricas de distancia. En cambio, en el caso de árboles de regresión si que sería útil ya que si que utilizan métricas de distancia.
+
+### Discretización
+
+Algunos técnicas de apredizaje precisan de una discretización previa de las variables continuas debido a que no son capaces de trabajar con variables de este tipo. Sin embargo, los árboles trabajan bien con variables de este tipo.
+
+
+### Balanceo del dataset
+
+Como hemos comentado anteriormente, el dataset después de aplicar la función de reducción de ruido se ha desbalanceado aún más. Por tanto, vamos a intentar aplicar técnicas de oversampling y oversampling para intentar que mejore la precisión de nuestro modelo.
+
+#### Oversampling
+
+##### SMOTE
+
+```{r smote}
+
+
+salidaSmote = ubSMOTE(datosSinRuido[,-51],datosSinRuido$C)
+
+datosSmote = cbind(salidaSmote$X, C = salidaSmote$Y)
+
+dim(datosSmote)
+```
+
+Podemos ver como hemos introducido el doble de datos de las que teníamos. Vamos a comprobar el desbalanceo.
+
+```{r proporcionClaseDespuesSMOTE}
+
+proporcion = group_by(datosSmote,C) %>% summarise(propo = round((nc = (n() * 100)/dim(datosSmote)[1]),digits = 1))
+proporcion
+
+df <- data.frame(clase=proporcion$C,
+                proporcion=proporcion$propo)
+
+p<-ggplot(df, aes(x=clase, y=proporcion, fill=clase)) +
+  geom_bar(stat="identity")+theme_minimal()
+p
+
+```
+
+Podemos observar como ya existe más equitatividad en cuanto a clases. Por tanto, veremos si mejoran los modelos. NO MEJORAN LOS MODELOS
+
+ROS
+```{r ros}
+
+set.sed(1)
+data.balanced.ou <- ovun.sample(C~., data=datosSinRuido, p=0.5, seed=1, method="over")$data
+
+#data.balanced.ou
+dim(data.balanced.ou)
+
+proporcion = group_by(data.balanced.ou,C) %>% summarise(propo = round((nc = (n() * 100)/dim(data.balanced.ou)[1]),digits = 1))
+proporcion
+
+df <- data.frame(clase=proporcion$C,
+                proporcion=proporcion$propo)
+
+p<-ggplot(df, aes(x=clase, y=proporcion, fill=clase)) +
+  geom_bar(stat="identity")+theme_minimal()
+p
+```
+
+#### Undersampling
+
+#### Tomek Link
+```{r tomeklink}
+set.seed(2)
+salidaTomek = ubTomek(datosSinRuido[,-51], datosSinRuido$C)
+
+datosTomek = cbind(salidaTomek$X, C = salidaTomek$Y)
+
+dim(datosTomek)
+
+proporcion = group_by(datosTomek,C) %>% summarise(propo = round((nc = (n() * 100)/dim(datosTomek)[1]),digits = 1))
+proporcion
+
+df <- data.frame(clase=proporcion$C,
+                proporcion=proporcion$propo)
+
+p<-ggplot(df, aes(x=clase, y=proporcion, fill=clase)) +
+  geom_bar(stat="identity")+theme_minimal()
+p
+```
+
+```{r tomeklink}
+set.seed(2)
+
+salidaTomek = ubTomek(datosTomek[,-51], datosTomek$C)
+
+datosTomek = cbind(salidaTomek$X, C = salidaTomek$Y)
+
+dim(datosTomek)
+
+proporcion = group_by(datosTomek,C) %>% summarise(propo = round((nc = (n() * 100)/dim(datosTomek)[1]),digits = 1))
+proporcion
+
+df <- data.frame(clase=proporcion$C,
+                proporcion=proporcion$propo)
+
+p<-ggplot(df, aes(x=clase, y=proporcion, fill=clase)) +
+  geom_bar(stat="identity")+theme_minimal()
+p
+```
+Con dos iteraciones mejora el model en kaggle y en el train: 
+Instances removed 206 : 4.02 % of 0 class ; 2.88 % of training ; Time needed 0.05 
+[1] 6943   51
+
+Con tres iteraciones: no se sabe aun
+
+Instances removed 140 : 2.85 % of 0 class ; 2.02 % of training ; Time needed 0.05 
+[1] 6803   51
 
 
 
-### Correlación
+Después de probar over and under no hemos encontrado mejoras signficativas en el modelo por ahora. Ahora pasaremos a la selección de características.
 
-El paquete mice nos ha permitido darnos cuenta de que existen variables correladas en el conjunto de datos, por lo que pasaremos ahora a analizar la correlación del conjunto de datos.
+### Selección de características: Filter
+
+En primer lugar probaremos con la estrategia de filtrado, la cual se basa en calcular la importancia de las variables para el modelo en función de una medida estadística. De los paquetes y los tipos que nos han sido asignados aplicaremos los distintos tipos y compararemos cual nos da mejor resultado en términos de precisión e interpretabilidad.
+
+### Selección de Características
+
+Este apartado es esencial para el aprendizaje de un buen clasificador. Existen muchos algoritmos los cuales son sensibles a las variables que utilicemos, de modo que si usamos variables que no aportan información al clasificador perjudican al aprendizaje. 
+
+Otra gran ventaja es que simplifican mucho el coste computacional de la clasificación, ya que reducimos la dimensionalidad del conjunto de datos y por tanto ahorramos tiempo de cómputo.
+
+Por último, cabe mencionar también que esto mejora enormemente la interpretabilidad del problema ya que nos resume el modelo en variables que son muy importantes a la hora de aprender el clasificador y que por tanto tenemos que tener en cuenta y nos ayuda a descartar aquellas que son inútiles o aportan poca información de utilidad.
 
 
-### Reducción de los datos
+#### Correlación
+
+Antes de realizar las diferentes estrategias pertinentes para buscar reducir la dimensionalidad de los datos, vamos a centrarnos en algo básico que se suele dar con mucha frecuencia en los conjuntos de datos, la correlación. 
+
+Dos variables están correladas cuando existe una relación fuerte entre ambas, de modo que en la medida en la que cambia una, cambia también la otra. Esto conlleva a que ambas variables aporten una información similar al modelo de aprendizaje y por tanto a que sea inútil contemplar ambas. Por tanto, es esencial analizar la correlación que existe entre las variables para ver que variables pueden ser eliminadas.
+
+Durante el análisis de datos perdidos, con el paquete mice hemos podido darnos cuenta de que existen variables correladas en el conjunto de datos, ya que dicho paquete no trata variables correladas y cuando se encuentra alguna de este tipo, las ignora. Por lo tanto, ahora realizaremos un estudio de correlación.
+
+```{r correlacion gráfico}
+
+corrMatrix = cor(na.omit(datosSinRuido[,-51]))
+corrplot::corrplot(corrMatrix, type = "upper", order="FPC", tl.col = "black", tl.srt = 45)
+
+```
+
+Cabe destacar que existen distintos tipos de correlación: positiva, negativa y no correlación. 
+
+En la gráfica, se representan con puntos de color azul con diferente intensidad las variables que tienen correlación positiva y con color rojo las que tienen correlación negativa, siendo 1 y -1 lo máximo respectivamente. El color blanco indica la no correlación. 
+
+Por tanto, podemos ver que existe una alta correlación positiva en la gran mayoría de las variables y correlación negativa entre un par de variables también. Viendo las altas correlaciones existentes, si aplicamos un umbral demasiado bajo seguramente eliminemos la gran mayoría de variables y por tanto perdamos mucha información que puede ser importante para el clasificador. Por tanto, aplicaremos un umbral bastante alto para que nos permitan eliminar algunas características que a priori sean redundantes pero que no nos hagan perder demasiada información.
 
 
-....
+```{r filtro correlacion}
+set.seed(3)
+#filtrado de variables:
+altamenteCorreladas = caret::findCorrelation(corrMatrix, cutoff=0.99999)
+
+datosSinCorrelacion = datosSinRuido [, -altamenteCorreladas]
+datosSinCorrelacion = as_tibble(datosSinCorrelacion)
+
+dim(datosSinCorrelacion)
+```
+
+Como podemos observar, hemos eliminado 13 variables de nuestro conjunto de datos, quedándonos con 37 características (más la de clase) lo que signfica que hemos conseguido reducir la dimensionalidad aproximadamente un 25%. Vamos a ver como quedaría ahora el gráfico de correlaciones.
 
 
-## Árboles de decisión -> Muy vulnerables al ruido
+
+```{r correlacion gráfico}
+
+corrMatrix = cor(na.omit(datosSinCorrelacion[,-38]))
+
+corrplot::corrplot(corrMatrix, type = "upper", order="FPC", tl.col = "black", tl.srt = 45)
+
+```
+Como podemos observar, siguen quedando variables muy correladas positivamente, sin embargo si quitamos el resto de variables muy correladas entre sí hemos podido comprobar que perdemos mucha información y por tanto empeora nuestro clasificador. También podemos observar que existe una alta correlación negativa entre las variables ''X12'' y ''X34'', sin embargo aunque mejoramos un poco el error en el conjunto del train, el test no mejora. Por tanto, pasaremos a aplicar técnicas de selección de características para intentar reducir aún más la dimensionalidad pero sin perder información.
+
+
+```{r correlacion gráfico}
+
+corrMatrix = cor(na.omit(datosTomek[,-51]))
+set.seed(3)
+#filtrado de variables:
+altamenteCorreladas = caret::findCorrelation(corrMatrix, cutoff=0.99999)
+
+datosSinCorrelacion = datosTomek [, -altamenteCorreladas]
+datosSinCorrelacion = as_tibble(datosSinCorrelacion)
+
+dim(datosSinCorrelacion)
+
+```
+
+
+
+
+#### Filter: Chi-Cuadrado
+
+Calcula la dependencia de cada variable a la variable de clase utilizando el test estadístico de independencia de Chi-Cuadrado.
+
+```{r chiquadrado}
+
+
+# se calculan los pesos de los atributos: la medida devuelta
+# indica el nivel de dependencia de cada atributo frente a la
+# variable clase
+weights <- FSelector::chi.squared(C~.,datosSinCorrelacion)
+print(weights)
+
+# se seleccionan los 5 mejores
+subset <- FSelector::cutoff.k(weights,40)
+
+# se muestran los seleccionados
+f <- as.simple.formula(subset,"C")
+print(f)
+#Class ~ X17 + X1 + X16 + X2 + X6
+#datosFChiSquared = datosSinCorrelacion[,-c(31)]
+#datosFChiSquared
+```
+
+#### Filter: Correlation
+
+Este algoritmo busca las variables más relevantes en términos de correlación con la variable de clase.
+
+```{r correlationf}
+
+# se calculan los pesos mediante correlacion lineal, La variable
+# clase se llama medv
+d = datosTomek
+d$C = as.integer(datosTomek$C)
+weights <- FSelector::linear.correlation(C~., d)
+
+# se muestran los pesos
+print(weights)
+
+# se seleccionan los tres mejores
+subset <- FSelector::cutoff.k(weights,40)
+f1 <- as.simple.formula(subset,"C")
+print(f1)
+barplot(weights$attr_importance, names.arg = rownames(weights), las=2)
+
+# se determinan los pesos mediante rank.correlation
+weights <- FSelector::rank.correlation(C~.,d)
+
+# se muestran los pesos
+print(weights)
+
+# se seleccionan los mejores
+subset <- FSelector::cutoff.k(weights,9)
+f2 <- as.simple.formula(subset,"C")
+print(f2)
+barplot(weights$attr_importance, names.arg = rownames(weights), las=2)
+
+
+```
+
+Aplicando los dos métodos de correlación y atendiendo a las 10 mejores, podemos observar como existen variables que se repiten en ambos conjuntos y por tanto podemos decir que serán esenciales a la hora de aprender nuestro clasificador: "X16" y "X23"
+
+#### Filter: Entropía
+
+Este algoritmo busca las variables más relevantes en términos de correlación con la variable de clase. Se utilizan métodos basados en entropía.
+
+```{r entropyf}
+
+# se obtienen las medidas mediante ganancia de informacion
+weights <- FSelector::information.gain(C~., datosSinRuido)
+
+# se muestran los pesos y se seleccionan los mejores
+print(weights)
+subset <- FSelector::cutoff.k(weights,4)
+f1 <- as.simple.formula(subset,"C")
+print(f1)
+
+# igual, pero con ganancia de informacion
+weights <- FSelector::gain.ratio(C~., datosSinRuido)
+print(weights)
+subset <- FSelector::cutoff.k(weights,45)
+f2 <- as.simple.formula(subset,"C")
+print(f2)
+# e igual con symmetrical.uncertainty
+weights <- FSelector::symmetrical.uncertainty(C~., datosSinRuido)
+print(weights)
+subset <- FSelector::cutoff.k(weights,50)
+f3 <- as.simple.formula(subset,"C")
+print(f3)
+
+```
+
+Hemos conseguido mejorar la precisión del train a 0.9810496 con C4.5, sin embargo no hemos logrado mejorar la precisión del test.
+
+
+#### Filter: OneR
+ 
+ ---COMPLETAR----
+Este algoritmo busca las variables más relevantes en términos de correlación con la variable de clase. Se utilizan métodos basados en entropía.
+
+```{r oneR}
+
+# se calculan los pesos
+weights <- FSelector::oneR(C~.,datosSinRuido)
+
+# se muestran los resultados
+print(weights)
+subset <- FSelector::cutoff.k(weights,50)
+f <- as.simple.formula(subset,"C")
+print(f)
+
+
+```
+
+Con 35 conseguimos una precisión idéntica a la que teníamos inicialmente con 38.
+
+```{r rf}
+# se calculan los pesos
+weights <- FSelector::random.forest.importance(C~.,datosSinRuido, importance.type=1)
+
+# se muestran los resultados
+print(weights)
+subset <- cutoff.k(weights,45)
+f <- as.simple.formula(subset,"C")
+print(f)
+```
+
+## Árboles de decisión 
 
 Los algoritmos típicos para árboles sin utilizar multiclasificadores son:
   - Árboles utilizando el criterio GINI a la hora de decidir como hacer los cortes.
@@ -285,8 +684,10 @@ Para comenzar, utilizaremos los tres algoritmos para obtener una referencia inic
 ```{r tree with gain}
 
 set.seed (2)
+
+datos = datosSinRuido
 # Construyo el arbol sobre el conjunto de entrenamiento
-tree.train = tree(as.factor(C)~. ,datosSinRuido)
+tree.train = tree(f3,datos)
 #tree.train
 
 summary(tree.train)
@@ -307,16 +708,20 @@ names(cv.train )
 cv.train
 
 # Ahora podamos el arbol con prune.misclass
-prune.train =prune.misclass (tree.train ,best =5)
+prune.train =prune.misclass (tree.train ,best = 5)
 par(mfrow =c(1,1))
 plot(prune.train)
 text(prune.train ,pretty =0)
 
-# Como se comportara este arbol en su capacidad de prediccion
+
+###Comprobar acierto en el train
+tree.pred.train =predict (prune.train , datos ,type="class")
+table(tree.pred.train ,datos$C)
+precision(tree.pred.train ,datos$C)
+
+
+# Comprobar acierto en el test
 tree.pred=predict (prune.train , test ,type="class")
-
-table(tree.pred ,tree.pred1)
-
 setwd("~/GitHub/practica_mineria_kaggle")
 generarEnvio(tree.pred, path = "./decisionTrees/")
 
@@ -324,61 +729,7 @@ generarEnvio(tree.pred, path = "./decisionTrees/")
 
 A priori obtenemos que las características más importantes son X1, X27, X23 Y X32. Sin embargo, por validación cruzada hemos obtenido el mismo error utilizando 4 nodos que 5, así que podaremos aquí el árbol y por tanto descartaremos la variable x32. Si quitamos el nodo X23 podemos ver que también nos siguen dando buenos resultados, sin embargo producen mayor error, por lo que probraremos con los dos. Con los 4 nodos hemos obtenido un error del 0.84737.
 
-```{r tree with gain}
 
-
-#### PRUEBAS PARTICIONANDO EL TRAIN
-
-
-library(tree)
-
-set.seed (2)
-
-# Dividir en training y test
-train.train= sample (1:nrow(train), (dim(train)[1]%/%3))
-train.test = train [-train.train ,]
-
-
-# Construyo el arbol sobre el conjunto de entrenamiento
-tree.train = tree(as.factor(C)~. , data = train, subset = train.train)
-#tree.train
-
-summary(tree.train)
-
-plot(tree.train)
-text(tree.train, pretty=0)
-
-#tree.train
-
-
-# Aplico el arbol sobre el conjunto de test
-tree.pred1 =predict(tree.train, train.test ,type ="class")
-table(tree.pred1 , train.test$C)
-
-precision(tree.pred1,train.test$C)
-
-#Aplicamos cv para intentar podar el árbol búscando el mejor número de nodos hoja.
-
-set.seed (3)
-cv.train = cv.tree(tree.train ,FUN=prune.misclass )
-names(cv.train )
-cv.train
-
-# Ahora podamos el arbol con prune.misclass
-prune.train =prune.misclass (tree.train ,best =4)
-par(mfrow =c(1,1))
-plot(prune.train)
-text(prune.train ,pretty =0)
-
-# Como se comportara este arbol en su capacidad de prediccion
-tree.pred=predict (prune.train , train.test ,type="class")
-
-table(tree.pred,train.test$C)
-
-precision(tree.pred,train.test$C)
-
-
-```
 
 
 Ahora vamos a probar con el algoritmo C4.5 implementado en RWeka. Es interesante saber que en RWeka hay disponibles otres tres algoritmos de los cuales es posible utilizar solo dos de ellos (el otro es un multiclasificador).
@@ -388,25 +739,36 @@ Ahora vamos a probar con el algoritmo C4.5 implementado en RWeka. Es interesante
 
 set.seed (2)
 
-modelC4.5 = J48(C~., datosSinRuido)
+datos = data.balanced.ou
+## Comprobar acierto en el train
+modelC4.5 = J48(C~., data=datos)
+cv_resul = evaluate_Weka_classifier(modelC4.5,numFolds=10)
+cv_resul
 
+modelC4.5 = J48(C~., datos) 
+precision(modelC4.5$predictions ,datos$C)
+
+#Comprobar acierto en el test
 modelC4.5.pred = predict(modelC4.5, test)
-
 setwd("~/GitHub/practica_mineria_kaggle")
 generarEnvio(modelC4.5.pred, path = "./decisionTrees/")
 
-######## probando a particionar nuestro conjunto train
 set.seed (2)
 
-# Dividir en training y test
-train.train= sample (1:nrow(datosImputadosAmelia), (dim(datosImputadosAmelia)[1]%/%3))
-train.test = datosImputadosAmelia [-train.train ,]
+datos = datosSinCorrelacion
+## Comprobar acierto en el train
+modelC4.5 = LMT(C~., data=datos)
+cv_resul = evaluate_Weka_classifier(modelC4.5,numFolds=10)
+cv_resul
 
-modelC4.5 = J48(as.factor(C)~., data= datosImputadosAmelia, subset = train.train)
+modelC4.5 = LMT(C~., datos) 
+precision(modelC4.5$predictions ,datos$C)
 
-modelC4.5.pred = predict(modelC4.5, train.test)
+#Comprobar acierto en el test
+modelC4.5.pred = predict(modelC4.5, test)
+setwd("~/GitHub/practica_mineria_kaggle")
+generarEnvio(modelC4.5.pred, path = "./decisionTrees/")
 
-precision(modelC4.5.pred, train.test$C)
 
 
 ```
@@ -422,3 +784,78 @@ Notas de subidas después de preprocesar:
 3. Con el paquete RobCompositions con ctree hemos obtenido el mismo resultado que para amelia, mientras que con C4.5  hemos conseguido un valor de 0.85706 lo que mejora el anterior algoritmo. Por tanto será interesante seguir con estos resultados.
 4. Con ctree después de haber eliminado las instancias con ruido hemos conseguido un acierot del 0.86 pero con c4.5 hemos mejorado hasta casi el 0.87. Solo hemos probado con las de robcompositions.
 5. Con ctree después de haber eliminado el ruido nos encontramos que el algoritmo no supera el 0.86. Sin embargo con Amelia y C4.5 hemos podido comprobar que mejora hasta 0.87850 lo que nos daría la mejor puntuación hasta el momento conseguida.
+
+6. Por lo que podemos observar, eliminar las variables altamente correladas no tiene mucho sentido ya que baja enormemente la precisión del clasificador. Sin embargo, puede que esto provoque un sobreajuste excesivo o que realmente
+
+7. Con 0.99999 y 38 variables siendo una de clase, el algoritmo mejora c4.5 a 0.88718. Para c4.5 en el train obtenemos un accuracy de 0.98025, (91.1344 usano cv ) y para ctree: 0.9029.
+8. Quitando la variable 12 con correlación negativa mejora un poco el modelo en cuanto al train, sin embargo en el test no se mejora.
+
+9. Sin quitar las variables correladas, usando como dataset el limpio sin ruido y aplicando el algoritmo de selección de variables symmetry (con 45 variables) hemos mejorado a 0.89127 el test en kaggle y a 0.987013 el train. (con 50 variables aumentamos aún más el train a 0.9878)
+
+10. Hemos obtenido un 0.90096 utilizando todas las variables, solo eliminando el ruido y no quitando correlaciones, usando el algoritmo LMT. Los resultados de cv obtenidos  sobre el train son: 
+Correctly Classified Instances        6979               92.4861 %
+Incorrectly Classified Instances       567                7.5139 %
+
+y de predicción normal: [1] 0.9349324
+
+11. Eliminando correlaciones hemos mejorado aún más lo anterior.0.90199. Los resultados de cv son: 
+Correctly Classified Instances        6986               92.5788 %
+Incorrectly Classified Instances       560                7.4212 %
+
+[1] 0.9313544
+
+12. con EF y eliminando correlación hemos conseguido lo mismo que con iPF.
+12.1 Con EF y 4.5: Correctly Classified Instances        6647               94.4042 %
+Incorrectly Classified Instances       394                5.5958 % y 0.9936089 de precisión, sin embargo en kaggle baja.
+12.2 Con EF y LMT: Correctly Classified Instances        6786               96.3784 %
+Incorrectly Classified Instances       255                3.6216 %
+y [1] 0.9809686 de precisión pero en kaggle no da todo lo bueno que podría. (0.89...)
+12.3 con analisis de correlación EF y C4.5 empeora bastante.
+12.4 Con correlación, EF y LMT: Correctly Classified Instances        6974               92.4198 %
+Incorrectly Classified Instances       572                7.5802 %
+0.9313544
+
+QUE DA LO MISMO QUE USANDO IPF, HABRÁ QUE COMPROBAR A VER COMO SE COMPORTA EL RESTO?
+
+13. Haciendo smote (oversampling) no hemos conseguido mejorar en absoluto el modelo. Correctly Classified Instances       13769               96.8966 %
+Incorrectly Classified Instances       441                3.1034 %
+
+Este modelo genera mucho sobre ajuste:  0.9973962, por lo que no tiene pinta que vayamos a poder mejorar el modelo con oversampling. En kaggle con correlaciones y utilizando IPF, LMT Y correlaciones hemos conseguido: 0.88259.
+
+14. Haciendo undersampling parece que va algo mejor. Hemos aplicado tomek link, ipf, lmt y correlación hemos conseguido buenos resultados pero no hemos conseguido llegar al máximo: 
+
+Correctly Classified Instances        5638               93.8259 %
+Incorrectly Classified Instances       371                6.1741 %
+
+[1] 0.9567316 y en kaggle 0.90045
+14.1 Haciendo dos iteraciones hemos conseguido mejorar un poco los resultados:
+  Correctly Classified Instances        6515               93.8355 %
+  Incorrectly Classified Instances       428                6.1645 %
+   0.9477171 y en kaggle 0.90301 lo que nos mejora el modelo actual de ipf lmt correlaciones de 0.90199. [1] 0.9486991
+  
+   
+   14.2 Haciendo tres itreaciones parece que no sube  (0.90199) así que dejaremos de reducir instancias:
+   
+   Correctly Classified Instances        6374               93.694  %
+  Incorrectly Classified Instances       429                6.306  %
+   
+
+15. utilizando ros bajamos la accuracy a 0.88871 sin correlación:
+
+Correctly Classified Instances       10519               95.5578 %
+Incorrectly Classified Instances       489                4.4422 %
+[1] 0.9992733
+
+Poor lo que podemos ver bastante sobre ajuste.
+
+15.1 con correlación: también la cagamos así que pasaremos de over and under.
+
+-----pasamos a hacer selección de características. Hemos decidido hasta ahora que los pasos seguidos son: amelia, ipf para ruido, undersampling, correlacion, LMT: los datos de referencia en cv son estos: 
+Correctly Classified Instances        6515               93.8355 %
+  Incorrectly Classified Instances       428                6.1645 %
+   0.9477171 y en kaggle --0.90301-- lo que nos mejora el modelo actual de ipf lmt correlaciones de 0.90199. [1] 0.9486991
+   -----
+   
+
+
+
