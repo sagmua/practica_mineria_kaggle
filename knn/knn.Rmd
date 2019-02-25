@@ -84,10 +84,7 @@ A continuaci?n se imputar?n los valores perdidos. Esto quiere decir que a cada u
 
 Vamos a ver el patr?n de datos perdidos que sigue nuestro conjunto de datos usando la libreria mice. Como podemos ver a continuaci?n, tenemos un total de 7778 variables que no tienen ningun valor perdido.
 
-```{r}
-patron <- mice::md.pattern(datos)
-print(patron)
-```
+ 
 
 Si observamos gr?ficamente el resultado proporcionado por el patr?n, vemos que no hay ninguna variable que tenga m?s de un valor perdido. Esto explica que en el paso anterior no se haya eliminado ninguna instancia, ya que, que una de las variables est? perdida no es raz?n suficiente como para poder eliminar la fila conmpleta.
 

@@ -1,0 +1,369 @@
+---
+title: "Definitiva knn"
+author: "Carmen Biedma Rodriguez"
+date: "25 de febrero de 2019"
+output: pdf_document
+---
+
+```{r}
+library(dplyr)
+library(Hmisc)
+library(caret)
+library(mice)
+library(VIM)
+library(class)
+library(outliers)
+library(ggplot2)
+library(mvoutlier)
+library(FSelector)
+library(corrplot)
+library(NoiseFiltersR)
+library(lattice)
+library(unbalanced)
+
+source("../funcionesAux.R")
+
+generarModelo <- function(train){
+  control = trainControl(method="cv", number=5)
+  model = caret::train(train[,-ncol(train)], train$C, method="knn",
+                  metric="Accuracy", trControl=control,
+                  tuneGrid = data.frame(.k = seq(1,21,2)))
+  model
+}
+```
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+```
+
+```{r}
+str(datos)
+```
+
+Lo primero que podemos decir de nuestro dataset es que tiene 9144 instancias y 51 variables, de las cuales tenemos 50 descriptivas y una de clasificación.
+
+```{r}
+pairs(datos[,c(1:10)],col=as.numeric(datos$C)+1)
+pairs(datos[,c(11:20)],col=as.numeric(datos$C)+1)
+pairs(datos[,c(21:30)],col=as.numeric(datos$C)+1)
+pairs(datos[,c(31:40)],col=as.numeric(datos$C)+1)
+pairs(datos[,c(41:50)],col=as.numeric(datos$C)+1)
+```
+
+```{r}
+boxplot(datos[,c(1:10)])
+boxplot(datos[,c(11:20)])
+boxplot(datos[,c(21:30)])
+boxplot(datos[,c(31:40)])
+boxplot(datos[,c(41:50)])
+```
+
+```{r}
+ggplot(datos,aes(x=C)) + geom_histogram(bins=2,fill="yellow")
+```
+
+En primer lugar, vamos a ver las caracteristicas que tienen los datos que vamos a estudiar. Lo primero que podemos observar con los boxplots es que tenemos una cantidad de outliers considerables y con valores muy extremos. De hecho, todos ellos parecen tener un mismo outlier con un valor muy pequeño. Todos estos valores anómalos tendremos que eliminarlos antes de realizar nuestro modelo.
+
+Otro aspecto interesante a observar es que las clases están desbalanceadas, por lo que sería conveniente aplicar algún método que equilibrase nuestro dataset de train.
+
+A continuación se procede a realizar el preprocesamiento de los datos.
+
+#DUPLICADOS
+
+Entendemos como instancias duplicadas aquellas que tienen el mismo valor para todas las varibles. Es interesante eliminar los datos duplicados de nuestro dataset ya que es información que no aporta nada nuevo y añade carga a la hora de realizar los modelos. Para ver qué datos tenemos duplicados vamos a utilizar el comando duplicated y directamente eliminaremos los mismos del dataset de train.
+
+```{r}
+d <- duplicated(datos)
+length(which(d == TRUE))
+datos <- datos[!d,]
+```
+
+#VALORES PERDIDOS
+
+Cuando se realiza una recopilación de datos es muy común encontrar algunas instancias de las que no se conoce el valor para alguna de las variables. A estos casos se les llaman valores perdidos y hacen que los algoritmos no funcionen bien o incluso que no se puedan aplicar cuando existen instancias con estas características. Hay algoritmos más sensibles que otros en este aspecto: por ejemplo knn no se puede aplicar cuando tenemos valores perdidos, sin embargo hay otros métodos que sí se pueden aplicar pero en algunos influye negativamente más que en otros. (AQUI PODEMOS PONER CADA UNO COMO AFECTTAN LOS VALORES PERDIDOS A SU ALGORITMO).
+
+Hay que tener en cuenta que los valores perdidos pueden venir originados por una variable de la que es complicado conocer su valor o por instancias de las que se desconoce la mayoría de sus variables. Para tratar estos casos, puede ser mejor eliminar la variable o la instancia antes que imputar dichos valores. De ésta manera, se fijará un porcentaje de valores perdidos mínimo a partir del cual si una instancia o una variable supera dicho umbral será eliminado. Cabe destacar que el umbral debe ser diferente para las variables y para las instancias.
+
+A continuación tenemos un ejemplo en el que fijamos un umbral al 5% para las instancias. Es decir, eliminaremos las instancias que tengan un porcentaje de valores perdidos mayor del 5%. Como no hay ningnua que cumpla dicha característica, no eliminaremos ninguna.
+
+```{r}
+porcentajes <- apply(datos,1, function(x) sum(is.na(x))) / ncol(datos) * 100
+eliminar <- porcentajes>5
+which(eliminar == TRUE)
+```
+
+Con la siguiente utilidad que nos proporciona el paquete mice podemos ver la distribución de los valores perdidos en nuestro dataset. Como podemos observar, en la parte izquiera del gráfico tenemos un número en cada fila, que se corresponde con el número de instancias que tienen un valor perdido en la variable señalada con el cuadrado en color rosa. La columna de dicho cuadrado se corresponde con la variable en la que encontramos en valor perdido. Además, a la derecha tenemos el número de valores perdidos que tienen las instancias de cada fila, por ejemplo e nla primera podemos decir que tenemos 7752 instancias para las que no hay ningun valor perdido. Otra información que nos proporciona es el número de valores perdidos que hay por cada una de las varibales viendo el recuento que hay abajo por columnas.
+
+Resumiendo la iformación del gráfico podemos ver que ninguna de las instancias tiene más de un valor perdido y que la variable que más valores perdidos tiene (no se cuál es porque no se ve bien), tiene 50.
+
+
+```{r}
+mice::md.pattern(datos,plot=TRUE)
+``` 
+
+Debido a que el método knn no funciona si no eliminamos dichos valores será que haremos a continuación. Para realizar la imputación hay muchos métodos que asignan diferentes valores a dichas variables: la media de los demás, aplicar un knn, etc.
+
+El primer lugar vamos a imputar los datos usando "predictive mean matching", una de las funcionalidades que también ofrece el paquete mice.
+
+```{r}
+completos <- mice::ncc(datos)
+incompletos <- mice::nic(datos)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+imputados <- mice::mice(datos, m=5, meth="pmm")
+datosImputados <- mice::complete(imputados)
+```
+
+Veamos si seguimos teniendo datos con valores perdidos.
+
+```{r}
+completos <- mice::ncc(datosImputados)
+incompletos <- mice::nic(datosImputados)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+```
+
+```{r}
+patron <- mice::md.pattern(datosImputados,plot=TRUE)
+```
+
+Una de las características que tiene este tipo de imputación es que no imputa valores de variables que están muy correladas. Por tanto, podemos considerar eliminar las variables que aun tengan valores perdidos ya que no proporcionarán mucha información a nuestro modelo. Si observamos la estructura del patrón, vemos que a partir de la columna 34 las variables tienen valores perdidos, por tanto, vamos a extraer los nombres de dichas variables y los eliminaremos de nuestro conjunto de datos.
+
+```{r}
+muycorreladas <- colnames(patron[,c(34:51)])
+muycorreladas
+datosImputados[,muycorreladas] <- NULL
+```
+
+```{r}
+patron <- mice::md.pattern(datosImputados,plot=TRUE)
+```
+
+```{r}
+muycorreladas <- colnames(patron[,c(21:33)])
+muycorreladas
+datosImputados[,muycorreladas] <- NULL
+```
+
+```{r}
+patron <- mice::md.pattern(datosImputados,plot=TRUE)
+```
+
+Ahora tenemos todos los datos imputados y todas las variables que no sirven eliminadas.
+
+#Escalado y centrado
+
+Uno de los aspectos muy importantes que hay que tener en cuenta es que, cuando estamos utilizando métodos que usan medidas de distancia para clasificar los datos, tenemos que normalizarlos. De ésta manera nos aseguramos de que no influya que los dominios de cada variable sean idstintos y un valor muy grande de alguna variable no haga que se tenga más en cuenta que las otras.
+
+```{r}
+datosPrep <- caret::preProcess(datosImputados[,-ncol(datosImputados)],method = c("center","scale"))
+datosImputados[,-ncol(datosImputados)] <- predict(datosPrep,datosImputados[,-ncol(datosImputados)])
+datosPrep <- caret::preProcess(test,method = c("center","scale"))
+test <- predict(datosPrep,test)
+```
+
+
+#Eliminacion de ruido
+
+```{r}
+datosImputados$C <- as.factor(datosImputados$C)
+set.seed (1)
+out <- IPF(C~., data = datosImputados ,s = 3)
+summary(out, explicit =TRUE)
+out$cleanData
+datosSinRuidoIPF <- datosImputados[setdiff(1:nrow(datosImputados),out$remIdx),]
+```
+
+```{r}
+boxplot(datosSinRuidoIPF[,c(1:10)])
+boxplot(datosSinRuidoIPF[,c(11:20)])
+```
+
+
+
+#GENERAR MODELO 1
+
+```{r}
+datosSinRuidoIPF$C <- as.factor(datosSinRuidoIPF$C)
+model <- generarModelo(datosSinRuidoIPF)
+model
+```
+
+```{r}
+test_pred <- predict(model,test)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioDefinitivo1.csv")
+```
+
+
+#GENERAR MODELO 2: eliminacion de outliers por debajo del primer cuartil*1.5
+
+```{r}
+datosSinOutliers <- apply(datosSinRuidoIPF[,1:(ncol(datosSinRuidoIPF)-1)],2,function(c){
+    cuartil.primero <- quantile(c,probs=0.25)
+    cuartil.tercero <- quantile(c,probs=0.75)
+    iqr <- cuartil.tercero - cuartil.primero
+    extremo.inferior.outlier.normal <- cuartil.primero - 1.5*iqr
+    extremo.inferior.outlier.normal
+
+    c[c<=extremo.inferior.outlier.normal] <- NA
+    c
+})
+```
+
+
+```{r}
+outliers <- outliers::outlier(datosSinRuidoIPF[,-ncol(datosSinRuidoIPF)])
+print(outliers)
+```
+
+Al método siguiente solo se le puede pasar un argumento de menos de 10 dimensiones, por lo que si queremos ver todos los outliers que hay en todas las variables, tenemos que ponerals por separado. Además, solo considera los outliers de una dimensión, es decir, que no detecta outliers qeu estén provocados por una combiación anómala de valores de un conjhunto de variables.
+
+```{r}
+resOutliers <- mvoutlier::uni.plot(datosSinRuidoIPF[1:10])
+```
+
+```{r}
+datosSinOutliers <- datosSinRuidoIPF[!resOutliers$outliers, ]
+resOutliers <- mvoutlier::uni.plot(datosSinOutliers[11:19])
+datosSinOutliers <- datosSinOutliers[!resOutliers$outliers, ]
+```
+
+```{r}
+boxplot(datosSinOutliers)
+```
+
+```{r}
+datosSinOutliers$C <- as.factor(datosSinOutliers$C)
+model <- generarModelo(datosSinOutliers)
+model
+```
+
+
+```{r}
+test_pred <- predict(model,test)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioDefinitivo2.csv")
+```
+
+#GENERAR MODELO 3: Amelia
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+```
+
+```{r}
+completos <- mice::ncc(datos)
+incompletos <- mice::nic(datos)
+cat("COMPLETOS = ", completos, " INCOMPLETOS = ",incompletos)
+
+imputados.amelia <- Amelia::amelia(datos,m=1,parallel="multicore",noms="C")
+
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+
+datosImputadosAmelia <- imputados.amelia$imputations$imp1
+```
+
+
+```{r}
+datosPrep <- caret::preProcess(datosImputadosAmelia[,-ncol(datosImputadosAmelia)],method = c("center","scale"))
+datosImputadosAmelia[,-ncol(datosImputadosAmelia)] <- predict(datosPrep,datosImputadosAmelia[,-ncol(datosImputadosAmelia)])
+datosPrep <- caret::preProcess(test,method = c("center","scale"))
+test <- predict(datosPrep,test)
+```
+
+```{r}
+datosImputadosAmelia$C <- as.factor(datosImputadosAmelia$C)
+set.seed (1)
+out <- IPF(C~., data = datosImputadosAmelia ,s = 3)
+summary(out, explicit =TRUE)
+out$cleanData
+datosSinRuidoIPF.Amelia <- datosImputadosAmelia[setdiff(1:nrow(datosImputadosAmelia),out$remIdx),]
+```
+
+```{r}
+datosSinRuidoIPF.Amelia$C <- as.factor(datosSinRuidoIPF.Amelia$C)
+model <- generarModelo(datosSinRuidoIPF.Amelia)
+model
+```
+
+TOMEK LINKS
+
+```{r}
+table(datosSinRuidoIPF.Amelia$C)
+balanced <- ubTomek(datosSinRuidoIPF.Amelia[,-ncol(datosSinRuidoIPF.Amelia)],datosSinRuidoIPF.Amelia$C)
+
+IPF.Amelia.Tomek1 <- balanced$X
+IPF.Amelia.Tomek1$C <- balanced$Y
+table(IPF.Amelia.Tomek1$C)
+
+balanced <- ubTomek(IPF.Amelia.Tomek1[,-ncol(IPF.Amelia.Tomek1)],IPF.Amelia.Tomek1$C)
+
+IPF.Amelia.Tomek2 <- balanced$X
+IPF.Amelia.Tomek2$C <- balanced$Y
+table(IPF.Amelia.Tomek2$C)
+```
+
+```{r}
+IPF.Amelia.Tomek2$C <- as.factor(IPF.Amelia.Tomek2$C)
+model <- generarModelo(IPF.Amelia.Tomek2)
+model
+```
+
+```{r}
+test_pred <- predict(model,test)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioDefinitivo3.csv")
+```
+
+
+Undersampling
+
+```{r}
+balanced <- ubUnder(X=IPF.Amelia.Tomek2[,-ncol(IPF.Amelia.Tomek2)], Y= IPF.Amelia.Tomek2$C, perc = 40, method = "percPos")
+
+IPF.Amelia.Tomek2.under <- balanced$X
+IPF.Amelia.Tomek2.under$C <- balanced$Y
+table(IPF.Amelia.Tomek2.under$C)
+```
+
+```{r}
+IPF.Amelia.Tomek2.under$C <- as.factor(IPF.Amelia.Tomek2.under$C)
+model <- generarModelo(IPF.Amelia.Tomek2.under)
+model
+```
+
+Seleccion de caracteristicas
+
+```{r}
+m <- cor(IPF.Amelia.Tomek2.under[,-ncol(IPF.Amelia.Tomek2.under)])
+correlados <- findCorrelation(m, cutoff = 0.8)
+IPF.Amelia.Tomek2.under.cor <- IPF.Amelia.Tomek2.under[,-correlados]
+test <- test[,-correlados]
+```
+
+```{r}
+IPF.Amelia.Tomek2.under.cor$C <- as.factor(IPF.Amelia.Tomek2.under.cor$C)
+model <- generarModelo(IPF.Amelia.Tomek2.under.cor)
+model
+```
+
+```{r}
+test_pred <- predict(model,test)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioDefinitivo4.csv")
+```

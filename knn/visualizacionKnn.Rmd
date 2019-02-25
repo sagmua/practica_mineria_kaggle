@@ -173,6 +173,7 @@ plot(datos$X42~datos$X41,col=datos$C)
 ```{r}
 datos.seleccion <- datos[,c("X3","X12","X16","X18","X23","X27","X41","X42","C")]
 pairs(datos.seleccion,col=datos.seleccion$C)
+test <- test[,c("X3","X12","X16","X18","X23","X27","X41","X42")]
 ```
 
 
@@ -181,8 +182,8 @@ Particionado
 ```{r}
 inTrain <- caret::createDataPartition(y = datos.seleccion$C, p = .75, list = FALSE)
 
-datos.train <- datos[ inTrain,]
-datos.test <- datos[-inTrain,]
+datos.train <- datos.seleccion[ inTrain,]
+datos.test <- datos.seleccion[-inTrain,]
 ```
 
 GENERAR MODELO 1
@@ -196,7 +197,7 @@ accuracy
 Cálculo de etiquetas del test
 
 ```{r}
-test_pred <- generarModelo(train = datos, test = test,3)
+test_pred <- generarModelo(train = rbind(datos.train,datos.test), test = test,3)
 ```
 
 
@@ -204,4 +205,54 @@ test_pred <- generarModelo(train = datos, test = test,3)
 generarEnvio(y=test_pred,file="envioA.1.csv")
 ```
 
-A.1 -> Sin redundantes , con imputacion knn, escalado y eliminacion de ruido, seleccion de caract: 0.8956337
+A.1 -> Sin redundantes , con imputacion knn, escalado y eliminacion de ruido, seleccion de caract: accuracy : 0.8940362 kaggle : 0.86932
+
+#modelo A.2 -> outliers
+
+```{r}
+resOutliers <- mvoutlier::uni.plot(datos.seleccion[,-ncol(datos.seleccion)])
+datos.seleccion.outliers <- datos.seleccion[!resOutliers$outliers, ]
+mvoutlier::uni.plot(datos.seleccion.outliers[,-ncol(datos.seleccion)])
+```
+
+```{r}
+pairs(datos.seleccion.outliers,col=datos.seleccion.outliers$C)
+```
+
+Particionado
+
+```{r}
+inTrain <- caret::createDataPartition(y = datos.seleccion.outliers$C, p = .75, list = FALSE)
+
+datos.train <- datos.seleccion.outliers[ inTrain,]
+datos.test <- datos.seleccion.outliers[-inTrain,]
+```
+
+GENERAR MODELO A.2
+
+```{r}
+train_pred <- generarModelo(train = datos.train, test = datos.test[,-ncol(datos.test)],k=3)
+accuracy<- precision(train_pred,datos.test$C)
+accuracy
+```
+
+Cálculo de etiquetas del test
+
+```{r}
+test_pred <- generarModelo(train = datos.train, test = test,3)
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envioA.2.csv")
+```
+
+A.2 -> Sin redundantes , con imputacion knn, escalado y eliminacion de ruido, seleccion de caract y eliminacion outliers: accuracy :0.9013112 kaggle : 0.86932
+
+#Prueba con una variale
+
+```{r}
+train_pred <- generarModelo(train = datos.train[,c("X18","X23","C")], test = datos.test[,-ncol(datos.test)],k=3)
+accuracy<- precision(train_pred,datos.test$C)
+accuracy
+```
