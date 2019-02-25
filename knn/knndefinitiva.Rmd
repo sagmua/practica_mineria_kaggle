@@ -198,7 +198,7 @@ generarEnvio(y=test_pred,file="envioDefinitivo1.csv")
 ```
 
 
-#GENERAR MODELO 2: eliminacion de outliers por debajo del primer cuartil*1.5
+#GENERAR MODELO 2: eliminacion de outliers 
 
 ```{r}
 datosSinOutliers <- apply(datosSinRuidoIPF[,1:(ncol(datosSinRuidoIPF)-1)],2,function(c){
@@ -366,4 +366,110 @@ test_pred
 
 ```{r}
 generarEnvio(y=test_pred,file="envioDefinitivo4.csv")
+```
+
+```{r}
+boxplot(IPF.Amelia.Tomek2.under.cor)
+```
+
+```{r}
+outliers <- outliers::outlier(IPF.Amelia.Tomek2.under.cor[,-ncol(IPF.Amelia.Tomek2.under.cor)])
+print(outliers)
+```
+
+```{r}
+resOutliers <- mvoutlier::uni.plot(IPF.Amelia.Tomek2.under.cor[,-ncol(IPF.Amelia.Tomek2.under.cor)])
+IPF.Amelia.Tomek2.under.cor.outl <- IPF.Amelia.Tomek2.under.cor[!resOutliers$outliers, ]
+```
+
+```{r}
+IPF.Amelia.Tomek2.under.cor.outl$C <- as.factor(IPF.Amelia.Tomek2.under.cor.outl$C)
+model <- generarModelo(IPF.Amelia.Tomek2.under.cor.outl)
+model
+```
+
+```{r}
+test_pred <- predict(model,test)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioDefinitivo5.csv")
+```
+
+#MODELO 6: outliers por debajo del primer cuartil*1.5
+
+En este caso, en vez de eliminar los outliers, vamos a imputar el valor anómalo. PAra ello usaremos el indice intercuartil para determinar que valores son anomalos, los pondremos a NA y después imputaremos. De esta forma no perderemos las instancias correspondienes a los outliers.
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+```
+
+
+```{r}
+d <- duplicated(datos)
+length(which(d == TRUE))
+datos <- datos[!d,]
+```
+
+
+```{r}
+datosOutliersNA <- apply(datos[,1:(ncol(datos)-1)],2,function(c){
+    cuartil.primero <- quantile(c,probs=0.25,na.rm = TRUE)
+    cuartil.tercero <- quantile(c,probs=0.75,na.rm = TRUE)
+    iqr <- cuartil.tercero - cuartil.primero
+    extremo.inferior.outlier.normal <- cuartil.primero - 1.5*iqr
+    extremo.inferior.outlier.normal
+
+    c[c<=extremo.inferior.outlier.normal] <- NA
+    c
+})
+
+datosOutliersNA <- as.data.frame(datosOutliersNA)
+datosOutliersNA$C <- datos$C
+```
+
+
+```{r}
+mice::md.pattern(datosOutliersNA,plot=TRUE)
+```
+
+
+```{r}
+completos <- mice::ncc(datosOutliersNA)
+incompletos <- mice::nic(datosOutliersNA)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+imputados <- mice::mice(datosOutliersNA, m=5, meth="pmm")
+datosImputados <- mice::complete(imputados)
+completos <- mice::ncc(datosImputados)
+incompletos <- mice::nic(datosImputados)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+datosOutliersNA.imputadosPMM <- datosImputados
+```
+
+Normalizar
+
+```{r}
+datosPrep <- caret::preProcess(datosOutliersNA.imputadosPMM [,-ncol(datosOutliersNA.imputadosPMM )],method = c("center","scale"))
+datosOutliersNA.imputadosPMM [,-ncol(datosOutliersNA.imputadosPMM )] <- predict(datosPrep,datosOutliersNA.imputadosPMM [,-ncol(datosOutliersNA.imputadosPMM )])
+datosPrep <- caret::preProcess(test,method = c("center","scale"))
+test <- predict(datosPrep,test)
+```
+
+```{r}
+datosOutliersNA.imputadosPMM $C <- as.factor(datosOutliersNA.imputadosPMM $C)
+model <- generarModelo(datosOutliersNA.imputadosPMM )
+model
+```
+
+
+```{r}
+test_pred <- predict(model,test)
+test_pred
+```
+
+
+```{r}
+generarEnvio(y=test_pred,file="envioDefinitivo6.csv")
 ```
