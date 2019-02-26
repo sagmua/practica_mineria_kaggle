@@ -32,6 +32,8 @@ library(corrplot)
 library(FSelector)
 library(unbalanced)
 library(ROSE)
+library(Boruta)
+
 #Funciones auxiliares:
 setwd("~/GitHub/practica_mineria_kaggle")
 source("funcionesAux.R")
@@ -257,6 +259,7 @@ str(datosSinRuido)
 
 ```
 
+
 Como podemos observar, se han detectado 1572 instancias con ruido y por tanto las hemos eliminado, aproximadamente un 17% del conjunto de datos era ruido. Atendiendo a esto, podemos afirmar que el ruido ha sido introducido de forma intencionada en el dataset siguiendo alguno de los métodos de introducción de ruido existentes.
 
 Una vez comprobado el ruido, vamos a volver a comprobar la distribución de clases del conjunto ya que seguramente debido a aplicar esta técnica el conjunto se haya desbalanceado más aún.
@@ -448,6 +451,12 @@ dim(datosTomek)
 proporcion = group_by(datosTomek,C) %>% summarise(propo = round((nc = (n() * 100)/dim(datosTomek)[1]),digits = 1))
 proporcion
 
+proporcion1 = group_by(datosSinRuido,C) %>% summarise(propo = (nc = (n())))
+proporcion1
+proporcion1 = group_by(datosTomek,C) %>% summarise(propo = (nc = (n())))
+proporcion1
+
+
 df <- data.frame(clase=proporcion$C,
                 proporcion=proporcion$propo)
 
@@ -459,7 +468,7 @@ Con dos iteraciones mejora el model en kaggle y en el train:
 Instances removed 206 : 4.02 % of 0 class ; 2.88 % of training ; Time needed 0.05 
 [1] 6943   51
 
-Con tres iteraciones: no se sabe aun
+Con tres iteraciones: no mejora. se queda en 0.911
 
 Instances removed 140 : 2.85 % of 0 class ; 2.02 % of training ; Time needed 0.05 
 [1] 6803   51
@@ -575,6 +584,7 @@ Este algoritmo busca las variables más relevantes en términos de correlación 
 
 ```{r correlationf}
 
+set.seed(2)
 # se calculan los pesos mediante correlacion lineal, La variable
 # clase se llama medv
 d = datosTomek
@@ -585,7 +595,7 @@ weights <- FSelector::linear.correlation(C~., d)
 print(weights)
 
 # se seleccionan los tres mejores
-subset <- FSelector::cutoff.k(weights,40)
+subset <- FSelector::cutoff.k(weights,38)
 f1 <- as.simple.formula(subset,"C")
 print(f1)
 barplot(weights$attr_importance, names.arg = rownames(weights), las=2)
@@ -597,7 +607,7 @@ weights <- FSelector::rank.correlation(C~.,d)
 print(weights)
 
 # se seleccionan los mejores
-subset <- FSelector::cutoff.k(weights,9)
+subset <- FSelector::cutoff.k(weights,33)
 f2 <- as.simple.formula(subset,"C")
 print(f2)
 barplot(weights$attr_importance, names.arg = rownames(weights), las=2)
@@ -605,6 +615,11 @@ barplot(weights$attr_importance, names.arg = rownames(weights), las=2)
 
 ```
 
+este es el que mejor va, con los 25 mejores: C ~ X16 + X23 + X27 + X42 + X18 + X3 + X12 + X34 + X26 + X44 + 
+    X21 + X41 + X31 + X24 + X15 + X37 + X17 + X48 + X32 + X7 + 
+    X30 + X1 + X47 + X20 + X13
+    
+    
 Aplicando los dos métodos de correlación y atendiendo a las 10 mejores, podemos observar como existen variables que se repiten en ambos conjuntos y por tanto podemos decir que serán esenciales a la hora de aprender nuestro clasificador: "X16" y "X23"
 
 #### Filter: Entropía
@@ -629,9 +644,10 @@ subset <- FSelector::cutoff.k(weights,45)
 f2 <- as.simple.formula(subset,"C")
 print(f2)
 # e igual con symmetrical.uncertainty
-weights <- FSelector::symmetrical.uncertainty(C~., datosSinRuido)
+
+weights <- FSelector::symmetrical.uncertainty(C~., datosSinCorrelacion)
 print(weights)
-subset <- FSelector::cutoff.k(weights,50)
+subset <- FSelector::cutoff.k(weights,35)
 f3 <- as.simple.formula(subset,"C")
 print(f3)
 
@@ -663,11 +679,11 @@ Con 35 conseguimos una precisión idéntica a la que teníamos inicialmente con 
 
 ```{r rf}
 # se calculan los pesos
-weights <- FSelector::random.forest.importance(C~.,datosSinRuido, importance.type=1)
+weights <- FSelector::random.forest.importance(C~.,datosSinCorrelacion, importance.type=1)
 
 # se muestran los resultados
 print(weights)
-subset <- cutoff.k(weights,45)
+subset <- cutoff.k(weights,24)
 f <- as.simple.formula(subset,"C")
 print(f)
 ```
@@ -757,11 +773,11 @@ set.seed (2)
 
 datos = datosSinCorrelacion
 ## Comprobar acierto en el train
-modelC4.5 = LMT(C~., data=datos)
-cv_resul = evaluate_Weka_classifier(modelC4.5,numFolds=10)
+modelC4.5 = LMT(C~., data=datos, control = Weka_control( M= 5))
+cv_resul = evaluate_Weka_classifier(modelC4.5,numFolds=10, seed = 2)
 cv_resul
 
-modelC4.5 = LMT(C~., datos) 
+#modelC4.5 = LMT(f1, datos) 
 precision(modelC4.5$predictions ,datos$C)
 
 #Comprobar acierto en el test
@@ -773,9 +789,153 @@ generarEnvio(modelC4.5.pred, path = "./decisionTrees/")
 
 ```
 
+Con control de weka:
 
-Hemos obtenido un error de 0.85400, por lo cual hemos mejorado un poco el anterior pero hemos empeorado nuestra marca anterior. 
+Correctly Classified Instances        6525               94.2919 %
+Incorrectly Classified Instances       395                5.7081 %
+Kappa statistic                          0.862 
+Mean absolute error                      0.0783
+Root mean squared error                  0.2056
+Relative absolute error                 19.0025 %
+Root relative squared error             45.3093 %
+Total Number of Instances             6920     
 
+=== Confusion Matrix ===
+
+    a    b   <-- classified as
+ 4700  213 |    a = 0
+  182 1825 |    b = 1
+[1] 0.9498555
+
+Con todas las variables usando solo undersampling: 0.90301 en kaggle
+
+Correctly Classified Instances        6520               93.9075 %
+Incorrectly Classified Instances       423                6.0925 %
+Kappa statistic                          0.8531
+Mean absolute error                      0.0823
+Root mean squared error                  0.2144
+Relative absolute error                 19.8784 %
+Root relative squared error             47.1304 %
+Total Number of Instances             6943     
+
+=== Confusion Matrix ===
+
+    a    b   <-- classified as
+ 4694  219 |    a = 0
+  204 1826 |    b = 1
+[1] 0.9508858
+
+usando correlaciones hemos obtenido exactamente lo mismo, por lo que hacemos más interpretable el modelo al reducir dimensionalidad.
+
+=== 10 Fold Cross Validation ===
+
+=== Summary ===
+
+Correctly Classified Instances        6527               94.0084 %
+Incorrectly Classified Instances       416                5.9916 %
+Kappa statistic                          0.8555
+Mean absolute error                      0.0846
+Root mean squared error                  0.2149
+Relative absolute error                 20.4487 %
+Root relative squared error             47.2394 %
+Total Number of Instances             6943     
+
+=== Confusion Matrix ===
+
+    a    b   <-- classified as
+ 4697  216 |    a = 0
+  200 1830 |    b = 1
+[1] 0.9477171
+
+
+Con semilla 2 25 variables:
+
+
+
+
+Semilla 2:
+
+Correctly Classified Instances        6523               93.9507 %
+Incorrectly Classified Instances       420                6.0493 %
+Kappa statistic                          0.8558
+Mean absolute error                      0.084 
+Root mean squared error                  0.213 
+Relative absolute error                 20.3013 %
+Root relative squared error             46.8225 %
+Total Number of Instances             6943     
+
+=== Confusion Matrix ===
+
+    a    b   <-- classified as
+ 4656  257 |    a = 0
+  163 1867 |    b = 1
+[1] 0.9481492
+
+baja en kaggle a 0.90096
+
+Con 25, 26, 33, 35 variables en correlacion pero empeora.
+=== 10 Fold Cross Validation ===
+
+=== Summary ===
+
+Correctly Classified Instances        6523               93.9507 %
+Incorrectly Classified Instances       420                6.0493 %
+Kappa statistic                          0.8556
+Mean absolute error                      0.0848
+Root mean squared error                  0.2134
+Relative absolute error                 20.5018 %
+Root relative squared error             46.9187 %
+Total Number of Instances             6943     
+
+=== Confusion Matrix ===
+
+    a    b   <-- classified as
+ 4660  253 |    a = 0
+  167 1863 |    b = 1
+[1] 0.9474291
+
+Con 35 variables y correlación
+
+=== 10 Fold Cross Validation ===
+
+=== Summary ===
+
+Correctly Classified Instances        6527               94.0084 %
+Incorrectly Classified Instances       416                5.9916 %
+Kappa statistic                          0.8553
+Mean absolute error                      0.0853
+Root mean squared error                  0.215 
+Relative absolute error                 20.6074 %
+Root relative squared error             47.2584 %
+Total Number of Instances             6943     
+
+=== Confusion Matrix ===
+
+    a    b   <-- classified as
+ 4702  211 |    a = 0
+  205 1825 |    b = 1
+[1] 0.9510298
+---Hemos obtenido un error de 0.85400, por lo cual hemos mejorado un poco el anterior pero hemos empeorado nuestra marca anterior. 
+
+=== 10 Fold Cross Validation ===
+
+=== Summary ===
+
+Correctly Classified Instances        6527               94.0084 %
+Incorrectly Classified Instances       416                5.9916 %
+Kappa statistic                          0.8555
+Mean absolute error                      0.0846
+Root mean squared error                  0.2149
+Relative absolute error                 20.4487 %
+Root relative squared error             47.2394 %
+Total Number of Instances             6943     
+
+=== Confusion Matrix ===
+
+    a    b   <-- classified as
+ 4697  216 |    a = 0
+  200 1830 |    b = 1
+[1] 0.9477171
 
 ###
 Notas de subidas después de preprocesar:
@@ -856,6 +1016,261 @@ Correctly Classified Instances        6515               93.8355 %
    0.9477171 y en kaggle --0.90301-- lo que nos mejora el modelo actual de ipf lmt correlaciones de 0.90199. [1] 0.9486991
    -----
    
+16. Usando future selection aplicando correlación con la variable de clase,(las 25 mejores) hemos conseguido mejorar a  0.90964 lo que nos ha dado bastante impulso.
+
+Correctly Classified Instances        6395               94.0026 %
+Incorrectly Classified Instances       408                5.9974 %
+
+0.9532559
+
+CON SEMILLA
+== 10 Fold Cross Validation ===
+
+=== Summary ===
+
+Correctly Classified Instances        6518               94.1908 %
+Incorrectly Classified Instances       402                5.8092 %
+Kappa statistic                          0.8603
+Mean absolute error                      0.0777
+Root mean squared error                  0.2094
+Relative absolute error                 18.864  %
+Root relative squared error             46.1554 %
+Total Number of Instances             6920     
+
+=== Confusion Matrix ===
+
+    a    b   <-- classified as
+ 4680  233 |    a = 0
+  169 1838 |    b = 1
+[1] 0.9518786
+
+en Kaggle 0.90301
+   
+Por tanto parece que vamos en buen camino y tendremos que seguir tirando por aquí.
+
+si subimos a 30 mejores bajamos en cv por lo que no probaremos en kaggle.
+
+17. Si usamos las 26 mejores subimos el acierto de cv:
+
+Correctly Classified Instances        6409               94.2084 %
+Incorrectly Classified Instances       394                5.7916 %
+Kappa statistic                          0.8626
+Mean absolute error                      0.0797
+Root mean squared error                  0.2104
+Relative absolute error                 19.0214 %
+Root relative squared error             45.9802 %
+
+1] 0.9526679 pero baja en kaggle: 0.90352
+
+18. Con 27 variables baja un poco y con 24 también. Lo dejaremos así.
+
+19. Hemos probado con la otra opción de correlación pero no mejora, también hemos probado con las basadas en gain y tampoco mejor (simmetry). 
+
+20. Con Random Forest y 35 pero no nos llega a mejorar el modelo,:
+
+=== 10 Fold Cross Validation ===
+
+=== Summary ===
+
+Correctly Classified Instances        6510               94.0751 %
+Incorrectly Classified Instances       410                5.9249 %
+Kappa statistic                          0.8567
+Mean absolute error                      0.0802
+Root mean squared error                  0.2102
+Relative absolute error                 19.4833 %
+Root relative squared error             46.3184 %
+Total Number of Instances             6920     
+
+[1] 0.9572254
+
+Con 32 variables:
+
+correctly Classified Instances        6529               94.3497 %
+Incorrectly Classified Instances       391                5.6503 %
+Kappa statistic                          0.8631
+Mean absolute error                      0.0801
+Root mean squared error                  0.2061
+Relative absolute error                 19.4383 %
+Root relative squared error             45.4291 %
+Total Number of Instances             6920     
+
+[1] 0.9562139
+
+Con 30 variables: 
+
+=== 10 Fold Cross Validation ===
+
+=== Summary ===
+
+Correctly Classified Instances        6534               94.422  %
+Incorrectly Classified Instances       386                5.578  %
+Kappa statistic                          0.8651
+Mean absolute error                      0.0773
+Root mean squared error                  0.2078
+Relative absolute error                 18.7753 %
+Root relative squared error             45.7835 %
+Total Number of Instances             6920     
+
+[1] 0.9602601
+
+con 25 variables:
+
+=== 10 Fold Cross Validation ===
+
+=== Summary ===
+
+Correctly Classified Instances        6532               94.3931 %
+Incorrectly Classified Instances       388                5.6069 %
+Kappa statistic                          0.8648
+Mean absolute error                      0.0768
+Root mean squared error                  0.2045
+Relative absolute error                 18.6539 %
+Root relative squared error             45.0577 %
+Total Number of Instances             6920     
+
+baja muchisimo.
+
+=== Confusion Matrix ===
+
+ 4695  218 |    a = 0
+  170 1837 |    b = 1
+[1] 0.9507225
+Con 24 variables: 
+
+=== 10 Fold Cross Validation ===
+
+=== Summary ===
+
+Correctly Classified Instances        6536               94.4509 %
+Incorrectly Classified Instances       384                5.5491 %
+Kappa statistic                          0.8664
+Mean absolute error                      0.0779
+Root mean squared error                  0.2073
+Relative absolute error                 18.9248 %
+Root relative squared error             45.6889 %
+Total Number of Instances             6920     
+
+[1] 0.9543353
+
+Con 26 variables: 
+
+Correctly Classified Instances        6534               94.422  %
+Incorrectly Classified Instances       386                5.578  %
+Kappa statistic                          0.8655
+Mean absolute error                      0.0777
+Root mean squared error                  0.2056
+Relative absolute error                 18.8767 %
+Root relative squared error             45.3151 %
+Total Number of Instances             6920     
+
+=== Confusion Matrix ===
+[1] 0.9546243
+
+Con 23 variables: 
+
+=== Summary ===
+
+Correctly Classified Instances        6529               94.3497 %
+Incorrectly Classified Instances       391                5.6503 %
+Kappa statistic                          0.8637
+Mean absolute error                      0.0808
+Root mean squared error                  0.2068
+Relative absolute error                 19.6189 %
+Root relative squared error             45.5685 %
+Total Number of Instances             6920     
+[1] 0.9536127
+
+Con 24 variables se queda cerca de mejorar en kaggle: 0.90505 habría que probar con 25 variables.
+
+
+
+-Habría que probar usando como importancia el tipo 2 en vez del 1(el que usa el gain)
+
+probando con 25 variables con gain:
+
+Correctly Classified Instances        6536               94.4509 %
+Incorrectly Classified Instances       384                5.5491 %
+Kappa statistic                          0.866 
+Mean absolute error                      0.0773
+Root mean squared error                  0.2045
+Relative absolute error                 18.7579 %
+Root relative squared error             45.0714 %
+Total Number of Instances             6920     
+
+[1] 0.9539017
+
+Con 26 variables: baja en kaggle : 0.90045, pero va bastante bien
+
+=== 10 Fold Cross Validation ===
+
+=== Summary ===
+
+Correctly Classified Instances        6545               94.5809 %
+Incorrectly Classified Instances       375                5.4191 %
+Kappa statistic                          0.869 
+Mean absolute error                      0.0765
+Root mean squared error                  0.2033
+Relative absolute error                 18.5708 %
+Root relative squared error             44.8046 %
+Total Number of Instances             6920     
+
+[1] 0.9536127
+Con 27 variables empeora.
+
+
+
+21. Probar modelos Wrapper like Boruta
+```{r boruta}
+
+# aprende el modelo
+Bor.son <- Boruta(C~.,data=datosTomek,doTrace=2)
+
+# muestra los resultados
+print(Bor.son)
+
+# se ven los resultados de decision de cada variable
+print(Bor.son$finalDecision)
+
+# imprime las estadisticas
+stats <- attStats(Bor.son)
+print(stats)
+
+# se muestran los resultados en forma grafica
+plot(Bor.son)
+
+# muestra un grafico de los resultado: los valores en
+# rojo estan relacionados con las variables confirmadas
+# mientras que los verdes con variables descartadas
+plot(normHits~meanImp,col=stats$decision,data=stats)
+
+
+```
+```{r bor_rf}
+
+library(randomForest)
+# aplicacion del metodo de seleccion
+Bor.ozo <- Boruta(C~.,data=datosTomek,doTrace=2)
+
+cat("Random forest sobre todos los atributos\n")
+model1 <- randomForest(C~.,data=datosTomek)
+print(model1)
+
+cat("Random forest unicamente sobre atributos confirmados\n")
+model2 <- randomForest(datosTomek[,getSelectedAttributes(Bor.ozo)],datosTomek$C)
+print(model2)
+
+# se muestra un grafico con los resultados de la seleccion
+plot(Bor.ozo)
+
+
+```
+
+Después de ejecutar el análisis de boruta, hemos podido comprobar que todas las variables son importantes para el modelo desde su punto de vista. Sin embargo, los mejores resultados los hemos obtenido descartando variables con correlaciones muy muy altas y utilizando las 25 variables que más correlación tienen con la variable de salida.
+
+Probaremos ahora con otros métodos, pero parece que no vamos a conseguir una reducción de variables interesantes:
+
+
+22. Probar a toquetear el modelo.
 
 
 
