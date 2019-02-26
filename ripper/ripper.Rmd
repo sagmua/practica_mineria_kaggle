@@ -146,7 +146,7 @@ Para ello realizamos una representación gráfica de las correlaciones entre las
 datos_sin_seleccion = datos
 # se encuentran aquellas variables que presentan valores de correlacion
 # por encima del valor umbral
-highlyCorrelated = caret :: findCorrelation(cor(datos) , cutoff =0.99)
+highlyCorrelated = caret :: findCorrelation(cor(datos) , cutoff =0.999999)
 datos = datos[,-highlyCorrelated]
 corrplot(cor(datos))
 ```
@@ -230,7 +230,7 @@ Probemos ahora con rmek:
 ```{r}
 
 set.seed(3)
-salidaTomek = ubTomek(datos_sin_seleccion[,-ncol(datos_sin_seleccion)], datos_sin_seleccion$C)
+salidaTomek = ubTomek(datos_duplicados[,-ncol(datos_duplicados)], datos_duplicados$C)
 
 datosTomek = cbind(salidaTomek$X, C = salidaTomek$Y)
 
@@ -246,7 +246,16 @@ df <- data.frame(clase=proporcion$C,
 p<-ggplot(df, aes(x=clase, y=proporcion, fill=clase)) +
   geom_bar(stat="identity")+theme_minimal()
 p
+
+
 ```
+```{r}
+datos_b = SMOTE(C~., data = datosTomek, perc.over = 150, k=5, perc.under = 0)
+datos_b = rbind(subset(datos_b, C==1), subset(datosTomek, C==0))
+
+```
+
+
 
 
 
@@ -259,7 +268,7 @@ Llegados a este punto, donde el preprocesamiento está realizado, sólo nos qued
 #discretizar:
 #datos = discretization::disc.Topdown(datos, method=1)
 
-modelRipp <- JRip(formula = C~.,data = datos_duplicados)
+modelRipp <- JRip(formula = C~.,data = datosTomek)
 #prediction = predict(modelRipp, datos)
 ```
 
@@ -271,7 +280,7 @@ evaluate_Weka_classifier(modelRipp, numFolds = 5, seed = 3)
 Generamos un primer envío, sin discretizar ni normalizar, ni outliers:
 ```{r}
 prediction = predict(modelRipp, test)
-generarEnvio(prediction, file = "datos_tomek_duplicados.csv")
+generarEnvio(prediction, file = "datos_tomek_con_seleccion:solo_una.csv")
 
 ```
 
