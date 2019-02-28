@@ -1,0 +1,243 @@
+---
+title: "SVM"
+author: "Antonio Benítez Guijarro"
+date: "15/02/2019"
+output: pdf_document
+---
+
+```{r, include=FALSE}
+#Intalacion de las librerias
+#Ejecutaremos esto solo para instalar los paquetes necesarios que no tengamos previamente en el sistema. Para ello solo descomentamos la linea del paquete que nos falte y la ejecutamos.
+#Esta libreria sera la principal para aplicar SVM al conjunto de datos que tenemos, con las posteriores realizaremos el preprocesamiento de los datos
+# install.packages("e1071")
+# install.packages("dplyr")
+# install.packages("Hmisc")
+# install.packages("arules")
+# install.packages("mice")
+# install.packages("mice")
+# install.packages("Amelia")
+# install.packages("PerformanceAnalytics")
+# install.packages("caret")
+# install.packages("corrplot")
+# install.packages("VIM")
+# install.packages("RWeka")
+# install.packages("NoiseFiltersR")
+# install.packages("FSelector")
+# install.packages("RKEEL")
+# install.packages("unbalanced")
+# install.packages("DMwR")
+
+#Carga de las librerias
+library(e1071)
+#library(dplyr)
+library(Hmisc)
+#library(arules)
+#library(mice)
+library(Amelia)
+library(PerformanceAnalytics)
+#library(caret)
+library(corrplot)
+library(VIM)
+library (NoiseFiltersR)
+library(FSelector)
+
+
+#Funcion auxiliar
+source("../funcionesAux.R")
+```
+#Lectura de los datos y preparación 
+```{r}
+datos = read.csv("../train.csv", na.string=c(" ", "NA", "?"))
+test = read.csv("../test.csv", na.string=c(" ", "NA", "?"))
+```
+#Presentación inicial de los datos
+Para tener una idea general de como son los datos con los que vamos a trabajar antes de realizar ningun preprocesamiento visualizaremos un resumen de los datos en función de las variables descriptivas con el fin de tener una ligera idea de cuales son los rangos con los que vamos a trabajar.
+Los datos que vamos a trabajar son:
+```{r}
+nrow(datos)
+```
+Formados por 50 variables descriptivas que vamos a visualizar en el siguiente paso.
+```{r}
+summary(datos)
+```
+De la misma forma el conjunto de datos de test se compone de las siguientes filas de datos:
+```{r}
+nrow(test)
+```
+Y su resumen es:
+```{r}
+summary(test)
+```
+
+
+Tras la primera visualizacion de ambos conjuntos de datos podemos hacernos a la idea de que rangos ocupan las variables descriptivas de cada elemento del conjunto de datos, y de la misma forma del conjunto de datos de test que utilizaremos para aplicar el modelo enrtrenado para producir las predicciones y generar la entrega para la competicion.
+
+# Análisis de los datos
+
+Para comenzar lo que haremos sera realizar un preprocesamiento de los datos con el fin de preparar el conjunto de datos para aplicar el modelo SVM.
+
+Primero comprobaremos si existen datos duplicados en el conjunto dado. Para ello usaremos lo siguiente:
+```{r}
+datos_duplicados = duplicated(datos)
+```
+ Ahora mediremos cuantas lineas dublicadas hay.
+ 
+```{r}
+length(which(datos_duplicados))
+datos = datos[!datos_duplicados,]
+
+proporcion_perdidos <- apply(datos,1, function(x) sum(is.na(x))) / ncol(datos) * 100
+
+mean(proporcion_perdidos)
+```
+Como vemos hay datos duplicados y por ello los eliminaremos.
+Tras esto comprobaremos si en el resto del conjunto hay datos vacios (perdidos). Para ello comprobaremos el numero de datos que contienen alguna falta. Como hemos observado podemos calcular el porcentaje medio de datos perdidos que se obtienen del conjunto para hacernos una idea de como esta el conjunto.
+
+```{r}
+valores_perdidos = apply(datos,1, function(x) length(which(is.na(x))))
+nrow(datos[which(valores_perdidos>1),])
+```
+Como resultado final vemos que los datos no tienen mas de un valor perdido pero que aparece un porcentaje medio relativamente alto de valores perdidos. Para ello vamos a analizar cual es el porcentaje de datos con valores perdidos.
+```{r}
+(nrow(datos[which(valores_perdidos==1),])/nrow(datos))*100
+```
+
+Como hemos observado con los calculos anteriores podemos ver que el conjunto de datos presenta cerca de un 15% de valores perdidos en el conjunto total, calculando la media de la proporcion es del 20% de los datos descriptivos. 
+
+Con el objetivo de estudiar mas lo que ocurre con los datos perdidos vamos a aplicar un estudio haciendo uso de MICE representando en varias graficas el estado actual del conjunto.
+
+```{r}
+datos_mice = mice::md.pattern(x = datos)
+porcentaje_correcto = mice::ncc(datos)
+porcentaje_perdidos = mice::nic(datos)
+```
+Con estos datos podriamos hacer una grafica pero ya sabiamos antes de comprobar en MICE cual era la proporcion de datos perdidos. Por ello y para mejorar los datos a actuales vamos a realizar una imputacion de los valores perdidos haciendo uso de Amelia.
+
+#Iputacion de los datos usando Amelia:
+```{r}
+imputados.amelia <- Amelia::amelia(datos,m=5,parallel="multicore",noms="C")
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+datos <- imputados.amelia$imputations$imp1
+```
+Una vez realizada la imputacion con Amelia ya hemos reducido los datos lo suficiente como para proseguir con su preprocesamiento.
+
+#Seleccion de las variables descriptoras
+
+Para esto vamos a hacer un estudio para correlacionar las variables descriptoras de los datos del conjunto con el objetivo de seleccionar y trabajar finalmente con aquellas que proporcionen mas informacion
+
+
+
+```{r}
+datos_en_raw = datos
+datos_con_alta_correlacion = caret :: findCorrelation(cor(datos) , cutoff =0.99)
+datos = datos[,-highlyCorrelated]
+
+#Eliminamos los datos que no aparecen correlacionados
+corrplot(cor(datos))
+
+weights = FSelector::linear.correlation(C~., datos)
+barplot(weights$attr_importance, names.arg = rownames(weights), las=2)
+
+```
+Tras observar las graficas podemos ver que la mayor correlacion con respecto a la variable de clase que estamos comparando son x3, x16, x18, x23, x27 y x42. Por ello vamos a seleccionar las vaeriables que mas peso tienen con respecto a nuestra variable de clase y escogeremos 6.
+```{r}
+subset = FSelector :: cutoff.k(weights ,6)
+#subset = cutoff.k(weights ,6)
+#subset = cutoff.k(weights ,9)
+conjunto = as.simple.formula(subset ,"C")
+weights = rank.correlation(C~.,datos)
+barplot(weights$attr_importance, names.arg = rownames(weights), las=2)
+datos$C = as.factor(datos$C)
+datos_en_raw$C = as.factor(datos_en_raw$C)
+print(conjunto)
+
+
+```
+
+
+Eliminacion de los datos del conjunto con ruido:
+```{r}
+set.seed (1)
+out = IPF(C~., data = datos , nfolds=5, s = 3)
+summary(out, explicit =TRUE)
+identical(out$cleanData , datos[ setdiff (1:nrow(datos) ,out$remIdx) ,])
+datos = out$cleanData
+
+datos_en_raw_out = IPF(C~., data = datos_en_raw , nfolds=5, s = 3)
+datos_en_raw = datos_en_raw_out$cleanData
+```
+
+# Calculo de los datos con anomalias:
+```{r}
+datos_anomalos <- outliers::outlier(datos[,-ncol(datos)])
+resOutliers1 <- mvoutlier::uni.plot(datos[1:6])
+
+```
+
+#Modelos SVM
+#IMPRESION DE LOS DATOS: Conjunto
+```{r}
+print(conjunto)
+```
+##IMPRESION DE LOS DATOS: DATOS
+```{r}
+print(datos)
+```
+
+##IMPRESION DE LOS DATOS: test
+```{r}
+print(test)
+```
+
+A partir de aqui crearemos el modelo SVM entrenandolo para encontrar el vector que mas separe los diferentes valores de clase que tenemos. Para ello creamos el modelo, y aplicamos un ajuste probando con diferentes gammas. A partir de esto escogeremos la que mayor performance tenga indicando que sera la que mas separe los datos del conjunto.
+
+```{r}
+#x <- subset(test, select=-C)
+#y <- C
+
+svm_model <- svm(conjunto, data = datos)
+#svm_model <- svm(conjunto, data = test)
+
+summary(svm_model)
+
+
+pred <- predict(svm_model,datos)
+
+system.time(pred <- predict(svm_model,datos))
+
+#print(pred)
+
+#svm_tune <- tune(svm, conjunto, data = datos, kernel="radial", ranges=list(cost=1, gamma=c(.2,.5,1,2)))
+svm_tune <- tune(svm, conjunto, data = datos, kernel="radial", ranges=list(cost=10^(-1:2), gamma=c(.5,1,2)))
+
+print(svm_tune)
+
+#svm_model_after_tune <- svm(  svm, conjunto, data = datos, kernel="radial", cost=1, gamma=0.5 )
+svm_model_after_tune <- svm(  conjunto, data=datos, kernel="radial", cost=1, gamma=0.0689526 )
+summary(svm_model_after_tune)
+
+pred <- predict(svm_model_after_tune,svm_model_after_tune)
+system.time(predict(svm_model_after_tune,svm_model_after_tune))
+
+
+```
+
+Ahora aplicamos el modelo generado con los datos de test y calcularemos la precision para generar el envio
+```{r}
+#precision(predictionLabels = prediccion, testLabels = datos$C)
+
+prediccion = predict(svm_model_after_tune, test)
+
+#generarEnvio(pred, file = "testEnvSVM10.csv")
+generarEnvio(prediccion, file = "EnvioSVM17.csv")
+
+```
+
+
+
+
+
+
+
