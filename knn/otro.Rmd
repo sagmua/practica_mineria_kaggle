@@ -174,3 +174,296 @@ test_pred
 ```{r}
 generarEnvio(y=test_pred,file="envioDefinitivo9.csv")
 ```
+
+
+
+
+#Envio último dia 1: imputacion,ruido y tomek
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+```
+
+
+```{r}
+imputados.amelia <- Amelia::amelia(datos,m=1,parallel="multicore",noms="C")
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+impAmelia <- imputados.amelia$imputations$imp1
+```
+
+```{r}
+impAmelia$C <- as.factor(impAmelia$C)
+out <- IPF(C~., data = impAmelia ,s = 3)
+summary(out, explicit =TRUE)
+out$cleanData
+impAmelia.IPF <- impAmelia[setdiff(1:nrow(impAmelia),out$remIdx),]
+```
+
+
+```{r}
+impAmelia.IPF$C <- as.factor(impAmelia.IPF$C)
+model <- generarModelo(impAmelia.IPF)
+model
+```
+
+
+
+```{r}
+table(impAmelia.IPF$C)
+balanced <- ubTomek(impAmelia.IPF[,-ncol(impAmelia.IPF)],impAmelia.IPF$C)
+
+impAmelia.IPF.Tomek1 <- balanced$X
+impAmelia.IPF.Tomek1$C <- balanced$Y
+table(impAmelia.IPF.Tomek1$C)
+
+balanced <- ubTomek(impAmelia.IPF.Tomek1[,-ncol(impAmelia.IPF.Tomek1)],impAmelia.IPF.Tomek1$C)
+
+impAmelia.IPF.Tomek2 <- balanced$X
+impAmelia.IPF.Tomek2$C <- balanced$Y
+table(impAmelia.IPF.Tomek2$C)
+```
+
+```{r}
+impAmelia.IPF.Tomek2$C <- as.factor(impAmelia.IPF.Tomek2$C)
+model <- generarModelo(impAmelia.IPF.Tomek2)
+model
+```
+
+
+```{r}
+datosPrep <- preProcess(impAmelia.IPF.Tomek2[,-ncol(impAmelia.IPF.Tomek2)], c("center", "scale"))
+impAmelia.IPF.Tomek2.norm <- predict(datosPrep, impAmelia.IPF.Tomek2)
+test.norm <- predict(datosPrep,test)
+```
+
+
+
+```{r}
+impAmelia.IPF.Tomek2.norm$C <- as.factor(impAmelia.IPF.Tomek2.norm$C)
+model <- generarModelo(impAmelia.IPF.Tomek2.norm)
+model
+```
+
+```{r}
+test_pred <- predict(model,test.norm)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioFinal1.csv")
+```
+
+
+#ENVIO FINAL 2: Normalizar antes de hacer nada
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+```
+
+
+```{r}
+imputados.amelia <- Amelia::amelia(datos,m=1,parallel="multicore",noms="C")
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+impAmelia <- imputados.amelia$imputations$imp1
+```
+
+```{r}
+datosPrep <- preProcess(impAmelia[,-ncol(impAmelia)], c("center", "scale"))
+impAmelia.norm <- predict(datosPrep, impAmelia)
+test.norm <- predict(datosPrep,test)
+```
+
+```{r}
+impAmelia.norm$C <- as.factor(impAmelia.norm$C)
+model <- generarModelo(impAmelia.norm)
+model
+```
+
+
+
+```{r}
+test_pred <- predict(model,test.norm)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioFinal2.csv")
+```
+
+```{r}
+table(impAmelia.norm$C)
+balanced <- ubTomek(impAmelia.norm[,-ncol(impAmelia.norm)],impAmelia.norm$C)
+
+impAmelia.norm.Tomek1 <- balanced$X
+impAmelia.norm.Tomek1$C <- balanced$Y
+table(impAmelia.norm.Tomek1$C)
+
+balanced <- ubTomek(impAmelia.norm.Tomek1[,-ncol(impAmelia.norm.Tomek1)],impAmelia.norm.Tomek1$C)
+
+impAmelia.norm.Tomek2 <- balanced$X
+impAmelia.norm.Tomek2$C <- balanced$Y
+table(impAmelia.norm.Tomek2$C)
+```
+
+```{r}
+impAmelia.norm.Tomek2$C <- as.factor(impAmelia.norm.Tomek2$C)
+model <- generarModelo(impAmelia.norm.Tomek2)
+model
+```
+
+```{r}
+test_pred <- predict(model,test.norm)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioFinal3.csv")
+```
+
+#Envio final 4: no hacer tomek, imputar, normalizar y ruido
+
+```{r}
+datos <- read.csv("../train.csv",na.strings=c(" ","NA","?"))
+test <- read.csv("../test.csv",na.strings=c(" ","NA","?"))
+```
+
+
+```{r}
+imputados.amelia <- Amelia::amelia(datos,m=1,parallel="multicore",noms="C")
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+impAmelia <- imputados.amelia$imputations$imp1
+```
+
+```{r}
+datosPrep <- preProcess(impAmelia[,-ncol(impAmelia)], c("center", "scale"))
+impAmelia.norm <- predict(datosPrep, impAmelia)
+test.norm <- predict(datosPrep,test)
+```
+
+```{r}
+impAmelia.norm$C <- as.factor(impAmelia.norm$C)
+out <- IPF(C~., data = impAmelia.norm ,s = 3)
+impAmelia.norm.IPF <- out$cleanData
+```
+
+```{r}
+impAmelia.norm.IPF$C <- as.factor(impAmelia.norm.IPF$C)
+model <- generarModelo(impAmelia.norm.IPF)
+model
+```
+
+
+```{r}
+test_pred <- predict(model,test.norm)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioFinal4.csv")
+```
+
+
+Añadimos tomek
+
+```{r}
+table(impAmelia.norm.IPF$C)
+balanced <- ubTomek(impAmelia.norm.IPF[,-ncol(impAmelia.norm.IPF)],impAmelia.norm.IPF$C)
+
+impAmelia.norm.IPF.Tomek1 <- balanced$X
+impAmelia.norm.IPF.Tomek1$C <- balanced$Y
+table(impAmelia.norm.IPF.Tomek1$C)
+
+```
+
+
+```{r}
+impAmelia.norm.IPF.Tomek1$C <- as.factor(impAmelia.norm.IPF.Tomek1$C)
+model <- generarModelo(impAmelia.norm.IPF.Tomek1)
+model
+```
+
+
+```{r}
+balanced <- ubTomek(impAmelia.norm.IPF.Tomek1[,-ncol(impAmelia.norm.IPF.Tomek1)],impAmelia.norm.IPF.Tomek1$C)
+
+impAmelia.norm.IPF.Tomek2 <- balanced$X
+impAmelia.norm.IPF.Tomek2$C <- balanced$Y
+table(impAmelia.norm.IPF.Tomek2$C)
+```
+
+```{r}
+impAmelia.norm.IPF.Tomek2$C <- as.factor(impAmelia.norm.IPF.Tomek2$C)
+model <- generarModelo(impAmelia.norm.IPF.Tomek2)
+model
+```
+
+
+
+```{r}
+test_pred <- predict(model,test.norm)
+test_pred
+```
+
+```{r}
+generarEnvio(y=test_pred,file="envioFinal5.csv")
+```
+
+Outliers
+
+```{r}
+datosOutliersNA <- apply(impAmelia.norm.IPF.Tomek2[,1:(ncol(datos)-1)],2,function(c){
+    cuartil.primero <- quantile(c,probs=0.25,na.rm = TRUE)
+    cuartil.tercero <- quantile(c,probs=0.75,na.rm = TRUE)
+    iqr <- cuartil.tercero - cuartil.primero
+    extremo.inferior.outlier.normal <- cuartil.primero - 1.5*iqr
+    extremo.superior.outlier.normal  <- cuartil.tercero + 1.5*iqr
+    
+    c[c<=extremo.inferior.outlier.normal] <- NA
+    c[c>=extremo.superior.outlier.normal] <- NA
+    c
+})
+
+datosOutliersNA <- as.data.frame(datosOutliersNA)
+datosOutliersNA$C <- impAmelia.norm.IPF.Tomek2$C
+```
+
+```{r}
+imputados.amelia <- Amelia::amelia(datosOutliersNA,m=1,parallel="multicore",noms="C")
+incompletos.amelia <- mice::nic(imputados.amelia$imputations$imp1)
+completos.amelia <- mice::ncc(imputados.amelia$imputations$imp1)
+cat("COMPLETOS = ", completos.amelia, " INCOMPLETOS = ",incompletos.amelia)
+impAmelia.outliersNa <- imputados.amelia$imputations$imp1
+```
+
+
+```{r}
+impAmelia.outliersNa$C <- as.factor(impAmelia.outliersNa$C)
+model <- generarModelo(impAmelia.outliersNa)
+model
+```
+
+
+```{r}
+completos <- mice::ncc(datosOutliersNA)
+incompletos <- mice::nic(datosOutliersNA)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+imputados <- mice::mice(datosOutliersNA, m=5, meth="pmm")
+pmm.outliersNa <- mice::complete(imputados)
+completos <- mice::ncc(pmm.outliersNa)
+incompletos <- mice::nic(pmm.outliersNa)
+cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
+```
+
+```{r}
+pmm.outliersNa$C <- as.factor(pmm.outliersNa$C)
+model <- generarModelo(pmm.outliersNa)
+model
+```

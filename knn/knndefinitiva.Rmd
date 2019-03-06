@@ -67,7 +67,7 @@ boxplot(datos[,c(41:50)])
 ggplot(datos,aes(x=C)) + geom_histogram(bins=2,fill="yellow")
 ```
 
-En primer lugar, vamos a ver las caracteristicas que tienen los datos que vamos a estudiar. Lo primero que podemos observar con los boxplots es que tenemos una cantidad de outliers considerables y con valores muy extremos. De hecho, todos ellos parecen tener un mismo outlier con un valor muy pequeño. Todos estos valores anómalos tendremos que eliminarlos antes de realizar nuestro modelo.
+En primer lugar, vamos a ver las caracteristicas que tienen los datos que vamos a estudiar. Lo primero que podemos observar con los boxplots es que tenemos una cantidad de outliers considerable y con valores muy extremos. De hecho, todos ellos parecen tener un mismo outlier con un valor muy pequeño. Todos estos valores anómalos tendremos que eliminarlos antes de realizar nuestro modelo.
 
 Otro aspecto interesante a observar es que las clases están desbalanceadas, por lo que sería conveniente aplicar algún método que equilibrase nuestro dataset de train.
 
