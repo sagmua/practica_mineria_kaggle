@@ -218,8 +218,8 @@ print(svm_tune)
 svm_model_after_tune <- svm(  conjunto, data=datos, kernel="radial", cost=1, gamma=0.0689526 )
 summary(svm_model_after_tune)
 
-pred <- predict(svm_model_after_tune,svm_model_after_tune)
-system.time(predict(svm_model_after_tune,svm_model_after_tune))
+pred <- predict(svm_model_after_tune,datos)
+system.time(predict(svm_model_after_tune,datos))
 
 
 ```
@@ -231,7 +231,7 @@ Ahora aplicamos el modelo generado con los datos de test y calcularemos la preci
 prediccion = predict(svm_model_after_tune, test)
 
 #generarEnvio(pred, file = "testEnvSVM10.csv")
-generarEnvio(prediccion, file = "EnvioSVM17.csv")
+generarEnvio(prediccion, file = "EnvioSVM18.csv")
 
 ```
 
