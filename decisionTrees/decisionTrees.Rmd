@@ -86,9 +86,13 @@ Como hemos observado teníamos algunas observaciones repetidas, así que las hem
 
 Ahora vamos a observar la proporción de la variable de clase con respecto a su presencia en las distintas observaciones para comprobar si existe desbalanceo en el problema.
 
-```{r proporcionClase}
 
-proporcion = group_by(train,C) %>% summarise(propo = round((nc = (n() * 100)/dim(train)[1]),digits = 1))
+
+```{r ..}
+
+datos = train
+datos$C = as.factor(datos$C)
+proporcion = group_by(datos,C) %>% summarise(propo = round((nc = (n() * 100)/dim(datos)[1]),digits = 1))
 proporcion
 
 df <- data.frame(clase=proporcion$C,
@@ -140,7 +144,7 @@ incompletas
 # del conjunto de datos y de la funcion de visualizacion # del patron de datos perdidos
 require(VIM)
 #Se visualiza un grafico que nos indica la forma en que se distribuyen los # datos perdidos
-datos = airquality
+
 # se genera el grafico de distribucion de datos perdidos . Solo 
 # se consideran las variables con datos perdidos
 plot = aggr(train , col=c("blue","red") , numbers=TRUE, sortVars=TRUE,labels=names(train), cex.axis=.5, gap=1, ylab=c("Grafico de datos perdidos","Patron"))
@@ -160,9 +164,9 @@ Debido a que aproximadamente tenemos un 10% del conjunto de observaciones con va
 En primer lugar empezaremos aplicando métodos de imputación del paquete mice, en concreto partiremos del método cart el cual se corresponde con una imputación por medio de árboles. Conviene utilizar algún método de este tipo o más complejo debido a que si sustiuimos por la media o la desviación no lleva a unos resultados precisos. Estos métodos más complejos de imputación consiste en generar conjuntos de datos aleatorios en diferentes particiones (las cuales indicamos con el parametro m de mice, batch) de forma que las imputaciones se van realizando sobre ellas. De esta forma, cada imputación realizada sobre una partición se utiliza para la siguiente, así se obtienen resultados cada vez más precisos.
 
 ```{r imputacion mice}
-#methods(mice)
+
 # se realiza la imputacion
-# 5 batch (series) diferentes de imputaciones. El método pmm es el de imputación que se utiliza
+# 5 batch (series) diferentes de imputaciones. El método cart es el de imputación que se utiliza
 imputados <- mice::mice(train, m=5, meth="cart", parallel = "multicore")
 
 # se completa el conjunto de datos con las imputaciones
@@ -222,7 +226,7 @@ cat("Datos completos: ",completos, " e incompletos: ",incompletos,"\n")
 ```
 Como podemos observar, con este paquete también obtenemos el conjunto de datos con todos los valores imputados. Según el gráfico casi todas las variables imputadas siguen un patron similar, excepto en algunos casos.
 
-Con esto terminaríamos la imputación de los datos a priori, a la hora de decidir con cual nos quedaremos de las 3 imputaciones, en cuanto a resultados podríamos quedarnos con Amelia o RobCompositions. ---- LUEGO DECIDIMOS----
+Con esto terminaríamos la imputación de los datos a priori, a la hora de decidir con cual nos quedaremos de las 3 imputaciones, en cuanto a resultados podríamos quedarnos con Amelia por rendimiento.
 
 ### Detección de Ruido
 
@@ -281,7 +285,10 @@ Como hemos podido adelantar, al aplicar IPF hemos provocado un desbalanceo aún 
 
 
 
----- RUIDO SIN IPF --- 
+#### EF
+
+Para probar otras alternativas hemos pensado en utilizar otros dos paquetes de la misma librería, en este caso Ensemble Filter (EF). Este método divide el dataset en nparticiones y se aplican diferentes algoritmos de aprendizaje (C4.5, 1-KNN y LDA) sobre cada combinación de las particiones disponibles menos 1 y despues es probado con la que hemos dejado fuera, la restante. Finalmente, se aplica un esquema de voto por consenso o mayoría para eliminar las instancias ruidosas, de modo que si es por consenso se elimina si todos los clasificadores dicen que está mal clasificada o si es por mayoría se elimina si al menos la mitad de los clasificadores dicen que está mal clasificada.
+
 
 ```{r ruido}
 
@@ -310,6 +317,12 @@ str(datosSinRuidoEF)
 
 ```
 
+#### CVCF
+
+La otra alternativa es Cross-Validated Committees Filter (CVCF), la cual es similar a EF pero tiene dos principales diferencias:
+  - El único algoritmo de aprendizaje que se utiliza es C4.5 ya que los algoritmos de árboles son los que mejor trabajan con datasets ruidosos.
+  - Cada clasificador aprendido mediante cross validation es usado para etiquetar todas las instancias del training, no solo las del test, como correctas o mal clasificadas.
+  
 ```{r ruido}
 
 # se inicializa la semilla aleatoria para reproducir los resultados
@@ -369,6 +382,8 @@ Como hemos comentado anteriormente, el dataset después de aplicar la función d
 
 ##### SMOTE
 
+Synthetic Minority Over-sampling Technique (SMOTE) es un algoritmo que nos permite hacer oversampling y undersampling al mismo tiempo, sin embargo lo hemos aplicado solo para oversamping. Básicamente escogemos un ejemplo de la clase minoritaria y se seleccionan al azar un número de vecinos más cercanos de la misma clase, no más de 5. Después se generan nuevos datos entre el punto de la clase minoritaria seleccionada y sus vecinos más cercanos elegidos.
+
 ```{r smote}
 
 
@@ -398,6 +413,9 @@ p
 Podemos observar como ya existe más equitatividad en cuanto a clases. Por tanto, veremos si mejoran los modelos. NO MEJORAN LOS MODELOS
 
 ROS
+
+Random Oversampling (ROS) básicamente consiste en generar muestras aleatorias de la clase minoritaria.
+
 ```{r ros}
 
 set.sed(1)
@@ -420,6 +438,8 @@ p
 #### Undersampling
 
 #### Tomek Link
+
+Básicamente consiste en hacer parejas de instancias mixtas, positivas y negativas, que estén muy cercanas entre sí y eliminarlas. Esto nos hace reducir ruido e instancias de las clases mayoritarias en las fronteras.
 ```{r tomeklink}
 set.seed(2)
 salidaTomek = ubTomek(datosSinRuido[,-51], datosSinRuido$C)
@@ -485,9 +505,9 @@ En primer lugar probaremos con la estrategia de filtrado, la cual se basa en cal
 
 Este apartado es esencial para el aprendizaje de un buen clasificador. Existen muchos algoritmos los cuales son sensibles a las variables que utilicemos, de modo que si usamos variables que no aportan información al clasificador perjudican al aprendizaje. 
 
-Otra gran ventaja es que simplifican mucho el coste computacional de la clasificación, ya que reducimos la dimensionalidad del conjunto de datos y por tanto ahorramos tiempo de cómputo.
+Otra gran ventaja de la selección de características es que simplifican mucho el coste computacional de la clasificación, ya que reducimos la dimensionalidad del conjunto de datos y por tanto ahorramos tiempo de cómputo.
 
-Por último, cabe mencionar también que esto mejora enormemente la interpretabilidad del problema ya que nos resume el modelo en variables que son muy importantes a la hora de aprender el clasificador y que por tanto tenemos que tener en cuenta y nos ayuda a descartar aquellas que son inútiles o aportan poca información de utilidad.
+Por último, cabe mencionar que este proceso mejora enormemente la interpretabilidad del problema ya que nos resume el modelo en variables que son muy importantes a la hora de aprender el clasificador y que por tanto tenemos que tener en cuenta y nos ayuda a descartar aquellas que son inútiles o aportan poca información de utilidad.
 
 
 #### Correlación
@@ -703,7 +723,7 @@ set.seed (2)
 
 datos = datosSinRuido
 # Construyo el arbol sobre el conjunto de entrenamiento
-tree.train = tree(f3,datos)
+tree.train = tree(as.factor(C)~.,datos)
 #tree.train
 
 summary(tree.train)
@@ -718,21 +738,21 @@ tree.pred1 =predict(tree.train, test ,type ="class")
 
 #Aplicamos cv para intentar podar el árbol búscando el mejor número de nodos hoja.
 
-set.seed (3)
+
 cv.train = cv.tree(tree.train ,FUN=prune.misclass )
 names(cv.train )
 cv.train
 
+
 # Ahora podamos el arbol con prune.misclass
-prune.train =prune.misclass (tree.train ,best = 5)
+prune.train =prune.misclass (tree.train ,best = 4)
 par(mfrow =c(1,1))
 plot(prune.train)
 text(prune.train ,pretty =0)
 
-
 ###Comprobar acierto en el train
 tree.pred.train =predict (prune.train , datos ,type="class")
-table(tree.pred.train ,datos$C)
+#table(tree.pred.train ,datos$C)
 precision(tree.pred.train ,datos$C)
 
 
@@ -755,13 +775,13 @@ Ahora vamos a probar con el algoritmo C4.5 implementado en RWeka. Es interesante
 
 set.seed (2)
 
-datos = data.balanced.ou
+datos = datosTomek
 ## Comprobar acierto en el train
-modelC4.5 = J48(C~., data=datos)
-cv_resul = evaluate_Weka_classifier(modelC4.5,numFolds=10)
+modelC4.5 = J48(as.factor(C)~., data=datos)
+cv_resul = evaluate_Weka_classifier(modelC4.5,numFolds=10, seed = 2)
 cv_resul
 
-modelC4.5 = J48(C~., datos) 
+#modelC4.5 = J48(C~., datos) 
 precision(modelC4.5$predictions ,datos$C)
 
 #Comprobar acierto en el test
@@ -771,20 +791,33 @@ generarEnvio(modelC4.5.pred, path = "./decisionTrees/")
 
 set.seed (2)
 
-datos = datosSinCorrelacion
+datos = datosTomek
 ## Comprobar acierto en el train
-modelC4.5 = LMT(C~., data=datos, control = Weka_control( M= 5))
-cv_resul = evaluate_Weka_classifier(modelC4.5,numFolds=10, seed = 2)
+modelLMT = LMT(C~., data=datos)
+cv_resul = evaluate_Weka_classifier(modelLMT,numFolds=10, seed = 2)
 cv_resul
 
 #modelC4.5 = LMT(f1, datos) 
-precision(modelC4.5$predictions ,datos$C)
-
+precision(modelLMT$predictions ,datos$C)
+plot(modelLMT)
 #Comprobar acierto en el test
-modelC4.5.pred = predict(modelC4.5, test)
+modelLMT.pred = predict(modelLMT, test)
 setwd("~/GitHub/practica_mineria_kaggle")
-generarEnvio(modelC4.5.pred, path = "./decisionTrees/")
+generarEnvio(modelLMT.pred, path = "./decisionTrees/")
 
+
+
+```
+
+```{r }
+print(modelLMT)
+pres <- as.party(modelLMT)
+partykit:::.list.rules.party(pres)
+
+proporcion = group_by(datosSmote,C) %>% summarise(propo = (nc = n()))
+proporcion
+
+summary(datosTomek)
 
 
 ```
@@ -1273,4 +1306,31 @@ Probaremos ahora con otros métodos, pero parece que no vamos a conseguir una re
 22. Probar a toquetear el modelo.
 
 
+ENTREGAS KAGGLE:
 
+Vamos a ordenar las instancias por puntuación pública, después también comentaremos su puntuación privada:
+
+1. Quitando correlaciones con la variable de clase ... etc - 1 en kaggle public: 0.90964 pero en privado 0.90102. Este modelo lo aprendimos usando amelia, ipf para ruido, undersampling, correlacion, LMT y haciendo selección de variables mediante correlación con la variable de clase escogiendo las 25 mejores.
+
+2. LMT y descartando variables por correlaciones - 2 en kaggle public 0.90301 pero en privado 0.90000.
+
+
+3. LMT con todas las variables - 3 en kaggle public igual que el anterior pero en privado el mejor de todos: 0.90561.
+
+4. LMT quitando variables con random forest - 4: 0.90505 y en privado 0.90204
+
+5. quitando correlaciones con la variable de clase - 5
+private 0.90051
+public 0.90096
+
+6. private 0.90051
+public 0.90352
+
+7. private 0.90102
+public 0.90199
+
+8. El mejor de J48 - 8: en privado 0.89030, en público 0.89127
+
+9. en private0.90459 en public 0.90045
+
+10. En private: 0.90306 en public0.90199
