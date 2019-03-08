@@ -48,10 +48,16 @@ Como podemos ver, es un problema que tiene 50 variables descriptivas y una de cl
 Otra de las cosas que ser?a interesante observar es si tenemos un problema desbalanceado, para ello crearemos una tabla en la que veremos las instancias que hay de una clase y de otra.
 
 ```{r}
-table(datos$C)
+ggplot(datos, aes(C)) +
+  geom_histogram(binwidth = 1)
 ```
 
 Como podemos ver, es un problema desbalanceado, por lo que ser? un aspecto a tratar en el preprocesamiento de los datos.
+
+```{r}
+boxplot(datos[1:25])
+boxplot(datos[26:49])
+```
 
 
 #ESCALADO Y CENTRADO DE LOS DATOS
@@ -59,11 +65,10 @@ Como podemos ver, es un problema desbalanceado, por lo que ser? un aspecto a tra
 ```{r}
 datosPrep <- caret::preProcess(datos[,-ncol(datos)],method = c("center","scale"))
 datos[,-ncol(datos)] <- predict(datosPrep,datos[,-ncol(datos)])
-datosPrep <- caret::preProcess(test,method = c("center","scale"))
 test <- predict(datosPrep,test)
 ```
 
-
+  
 
 #Imputación de valores perdidos.
 
@@ -151,7 +156,6 @@ Para realizar esta tarea hay diferentes criterios y diferentes algoritmos. Vamos
 
 #Correlación lineal
 
-EL MODELO OBTENIDO NOS DA UN ACCURACY EN TRAIN DE 0.9995869 Y EN TEST DE 0.79989 POR LO QUE PODEMOS DECIR QUE EL MODELO SOBREAJUSTA. -> NOTA: Habría que ver si hay que eliminar menos variables o más.
 
 En primer lugar, vamos a estudiar la importancia de las variables que teemos en el problema. Para ello, en primera instancia, veremos como de correladas están entre sí. Eliminaremos aquiellas que están más correladas.
 
@@ -841,6 +845,7 @@ Cálculo de etiquetas del test
 test_pred <- generarModelo(train = datos.smote.sinoutliers, test = test,3)
 ```
 
+Siempre que tenemos un conjunto de datos con muchas variables es conveniente analizarlas desde el punto de vista informativo, es decir, considerar qué variables aportan realmente información a nuestro modelo. Para realizar dicha selección existe muchas medidas y métodos, pero todo depende del objetivo que tengamos.
 
 ```{r}
 generarEnvio(y=test_pred,file="envio_smote_sinoutliers.csv")
