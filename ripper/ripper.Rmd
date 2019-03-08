@@ -146,7 +146,7 @@ Para ello realizamos una representación gráfica de las correlaciones entre las
 datos_sin_seleccion = datos
 # se encuentran aquellas variables que presentan valores de correlacion
 # por encima del valor umbral
-highlyCorrelated = caret :: findCorrelation(cor(datos) , cutoff =0.999999)
+highlyCorrelated = caret :: findCorrelation(cor(datos[,-ncol(datos)]) , cutoff =0.99999)
 datos = datos[,-highlyCorrelated]
 corrplot(cor(datos))
 ```
@@ -205,12 +205,11 @@ print(anomalos)
 
 
 resOutliers1 <- mvoutlier::uni.plot(datos[1:10])
-#resOutliers2 <- mvoutlier::uni.plot(datos[11:ncol(datos)])
-#resOutliers3 <- mvoutlier::uni.plot(datos[21:30])
-#resOutliers4 <- mvoutlier::uni.plot(datos[31:40])
-#resOutliers2 <- mvoutlier::uni.plot(datos[c(41:44,46:50)])
+resOutliers2 <- mvoutlier::uni.plot(datos[11:20])
+resOutliers3 <- mvoutlier::uni.plot(datos[21:30])
 
-
+anom = resOutliers1$outliers | resOutliers2$outliers | resOutliers3$outliers
+datos = datos[-anom,]
 
 
 ```
@@ -230,7 +229,7 @@ Probemos ahora con rmek:
 ```{r}
 
 set.seed(3)
-salidaTomek = ubTomek(datos_duplicados[,-ncol(datos_duplicados)], datos_duplicados$C)
+salidaTomek = ubTomek(datos_sin_seleccion[,-ncol(datos_sin_seleccion)], datos_sin_seleccion$C)
 
 datosTomek = cbind(salidaTomek$X, C = salidaTomek$Y)
 
